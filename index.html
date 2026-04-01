@@ -4315,7 +4315,7 @@ function renderCalendar() {
     });
     if (overflow.length > 0) {
       var overId = 'ov-' + y + '-' + (m+1) + '-' + d;
-      html += '<div class="cal-more-btn" onclick="calExpandDay('' + overId + '')">+' + overflow.length + ' more &#9662;</div>';
+      html += '<div class="cal-more-btn" onclick="calExpandDay(\'' + overId + '\')">+' + overflow.length + ' more &#9662;</div>';
       html += '<div id="' + overId + '" style="display:none">';
       overflow.forEach(function(b) {
         var recIdx = calFindRecurringIdx(b.name);
