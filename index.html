@@ -1673,7 +1673,13 @@ function loadState() {
   state = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_STATE));
   // ensure arrays exist
   if (!state.transactions) state.transactions = [];
-  if (!state.roadmap) state.roadmap = DEFAULT_STATE.roadmap;
+  if (!state.roadmap)      state.roadmap = DEFAULT_STATE.roadmap;
+  if (!state.recurring)    state.recurring = [];
+  if (!state.debts)        state.debts = [];
+  if (!state.goals)        state.goals = [];
+  if (!state.assets)       state.assets = [];
+  if (!state.nwHistory)    state.nwHistory = [];
+  if (!state.dayItems)     state.dayItems = [];
 }
 
 function saveState() {
@@ -1758,10 +1764,10 @@ function txInWeek(tx) {
 
 function allCategories() {
   var cats = [];
-  state.needs.forEach(n => { if (!cats.includes(n.name)) cats.push(n.name); });
-  state.wants.forEach(w => { if (!cats.includes(w.name)) cats.push(w.name); });
+  state.needs.forEach(function(n) { if (!cats.includes(n.name)) cats.push(n.name); });
+  state.wants.forEach(function(w) { if (!cats.includes(w.name)) cats.push(w.name); });
   cats.push('Income');
-  cats.push('Other');
+  cats.push('Uncategorized');
   return cats;
 }
 
@@ -2970,14 +2976,25 @@ function restoreData(e) {
         });
         state.nwHistory = localHist.sort(function(a,b){ return a.date.localeCompare(b.date); });
 
+        // Ensure arrays after merge
+        if (!state.recurring) state.recurring = [];
+        if (!state.debts)     state.debts = [];
         saveState();
-        showToast('Merged — ' + added + ' new transactions added, settings updated');
+        showToast('Merged — ' + added + ' new transactions added, ' + state.recurring.length + ' recurring rules loaded');
 
       } else {
         // Full replace
         state = incoming;
+        // Ensure all arrays exist after restore
+        if (!state.transactions) state.transactions = [];
+        if (!state.recurring)    state.recurring = [];
+        if (!state.debts)        state.debts = [];
+        if (!state.goals)        state.goals = [];
+        if (!state.assets)       state.assets = [];
+        if (!state.nwHistory)    state.nwHistory = [];
+        if (!state.dayItems)     state.dayItems = [];
         saveState();
-        showToast('Restored — ' + (state.transactions||[]).length + ' transactions loaded');
+        showToast('Restored — ' + state.transactions.length + ' transactions, ' + state.recurring.length + ' recurring rules loaded');
       }
 
       // Always merge overrides and amount rules
@@ -3181,7 +3198,8 @@ function resolveCategory(desc, amount) {
   if (containsKey) return overrides[containsKey];
 
   // Auto-categorize by keyword
-  return autoCategory(desc);
+  var autoCat = autoCategory(desc);
+  return autoCat || 'Uncategorized';
 }
 
 function loadAmountRules() {
@@ -3234,7 +3252,7 @@ function autoCategory(desc) {
   if (d.includes('ATM WITHDRAWAL') || d.includes('ATM TRANSACTION') || d.includes('CARD FREE ATM')) return 'Cash';
   if (d.includes('AMAZON') || d.includes('AFTERPAY') || d.includes('BAMBU') || d.includes('EBAY') || d.includes('ETSY') || d.includes('BACKCOUNTRY') || d.includes('REI.COM')) return 'Other';
   if (d.includes('PAYPAL')) return 'Other';
-  return 'Other';
+  return 'Uncategorized';
 }
 
 // Build category dropdown options
@@ -3513,32 +3531,35 @@ function miscApplyCat(txId, makeRule) {
   var newCat = selEl.value;
   var dUp = tx.description.toUpperCase().trim();
 
-  // Extract the meaningful vendor prefix (first meaningful word chunk)
-  // e.g. "AMAZON MKTPL*BC7AJ3ZV2" -> "AMAZON"
-  //      "SHEETZ #1234 MEADVILLE" -> "SHEETZ"
-  var vendorMatch = dUp.match(/^([A-Z][A-Z0-9&\- ]{2,15}?)(?:\s*[#\*\d]|$)/);
-  var vendorKey = vendorMatch ? vendorMatch[1].trim() : overrideKey(tx.description);
+  // Extract vendor key
+  var vendorMatch = dUp.match(/^([A-Z][A-Z0-9&. -]{2,18}?)(?:\s*[#*\d]|$)/);
+  var vendorKey = vendorMatch ? vendorMatch[1].trim() : dUp.slice(0,20).trim();
+
+  // Snapshot for undo
+  var snapshot = state.transactions.map(function(t){ return {id:t.id, category:t.category}; });
+  var snapshotOverrides = JSON.stringify(loadOverrides());
+  window._lastRuleUndo = { snapshot: snapshot, overrides: snapshotOverrides, vendorKey: vendorKey, newCat: newCat };
 
   // Apply to this transaction
   tx.category = newCat;
 
   var updatedCount = 1;
   if (makeRule) {
-    // Retroactively apply to ALL transactions whose description contains vendorKey
     state.transactions.forEach(function(t) {
-      if (t.id === txId) return; // already done
+      if (t.id === txId) return;
       if (t.description.toUpperCase().includes(vendorKey)) {
         t.category = newCat;
         updatedCount++;
       }
     });
-    // Save contains-style override rule
     var overrides = loadOverrides();
     overrides[vendorKey] = newCat;
     saveOverrides(overrides);
-    showToast(updatedCount + ' transactions updated: "' + vendorKey + '" → ' + newCat);
+    showToast(updatedCount + ' updated: "' + vendorKey + '" → ' + newCat + '   [Undo?]');
+    // Show undo button
+    showUndoBar(vendorKey, newCat, updatedCount);
   } else {
-    showToast('Category updated (this transaction only)');
+    showToast('Updated (this transaction only)');
   }
 
   saveState();
@@ -3547,15 +3568,46 @@ function miscApplyCat(txId, makeRule) {
   setTimeout(renderMisc, 800);
 }
 
+function showUndoBar(vendorKey, newCat, count) {
+  var existing = document.getElementById('misc-undo-bar');
+  if (existing) existing.remove();
+  var bar = document.createElement('div');
+  bar.id = 'misc-undo-bar';
+  bar.style.cssText = 'position:fixed;bottom:5rem;left:50%;transform:translateX(-50%);background:var(--steel);border:1px solid var(--border);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:12px;z-index:150;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+  bar.innerHTML = '<span style="color:var(--muted)">' + count + ' transactions → ' + newCat + '</span>' +
+    '<button onclick="undoLastRule()" class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--amber2);border-color:var(--amber2)">↩ Undo</button>' +
+    '<button onclick="document.getElementById(\'misc-undo-bar\').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">×</button>';
+  document.body.appendChild(bar);
+  // Auto-dismiss after 15 seconds
+  setTimeout(function() { if (bar.parentNode) bar.remove(); }, 15000);
+}
+
+function undoLastRule() {
+  if (!window._lastRuleUndo) { showToast('Nothing to undo'); return; }
+  var undo = window._lastRuleUndo;
+  // Restore transaction categories
+  undo.snapshot.forEach(function(snap) {
+    var tx = state.transactions.find(function(t){ return t.id === snap.id; });
+    if (tx) tx.category = snap.category;
+  });
+  // Restore overrides
+  try { localStorage.setItem('bowes_cat_overrides', undo.overrides); } catch(e) {}
+  // Remove the rule from overrides
+  saveState();
+  window._lastRuleUndo = null;
+  var bar = document.getElementById('misc-undo-bar');
+  if (bar) bar.remove();
+  showToast('Undone — rule removed, categories restored');
+  renderMisc();
+}
+
 // ─── RECURRING RULES ──────────────────────────────────────────────────────────
 
 var DEFAULT_RECURRING = [];  // Personal rules live in Dropbox — not hardcoded
 
 function initRecurring() {
-  if (!state.recurring) {
-    state.recurring = JSON.parse(JSON.stringify(DEFAULT_RECURRING));
-    saveState();
-  }
+  // state.recurring is initialized in loadState
+  // DEFAULT_RECURRING is empty - personal rules come from Dropbox backup
 }
 
 // ── SCHEDULE ENGINE — does this rule fire on dateStr? ────────────────────────
