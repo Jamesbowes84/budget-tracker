@@ -430,6 +430,29 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .alert-title { font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px }
 .alert-body  { font-size:12px;color:var(--muted) }
 
+
+/* ─── SIDEBAR SCROLL + COLLAPSIBLE ──────────────────────────────── */
+.sidebar-nav {
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding-bottom:.5rem;
+}
+.sidebar-nav::-webkit-scrollbar{width:3px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:var(--steel);border-radius:999px}
+
+.nav-section-hdr {
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 1.25rem 4px;
+  font-size:10px;font-weight:600;letter-spacing:.08em;
+  color:var(--muted);text-transform:uppercase;
+  cursor:pointer;user-select:none;
+  transition:color .15s;
+}
+.nav-section-hdr:hover { color:var(--white); }
+.nav-sec-chevron { font-size:10px;transition:transform .2s; }
+.nav-sec-chevron.collapsed { transform:rotate(-90deg); }
+.nav-section-body { overflow:hidden;transition:max-height .25s ease; }
+.nav-section-body.collapsed { max-height:0!important; }
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -443,46 +466,62 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="logo-sub" id="app-year">Personal Finance</div>
     </div>
 
-    <div class="nav-item active" onclick="nav('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
-    <div class="nav-item" onclick="nav('daybyday')"><span class="nav-icon">⬦</span> Day by Day</div>
-    <div class="nav-item" onclick="nav('calendar')"><span class="nav-icon">▦</span> Bill Calendar</div>
-    <div class="nav-item" onclick="nav('alerts')"><span class="nav-icon">◐</span> Alerts</div>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <!-- TOP NAV — always visible -->
+      <div class="nav-item active" onclick="nav('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
+      <div class="nav-item" onclick="nav('daybyday')"><span class="nav-icon">⬦</span> Day by Day</div>
+      <div class="nav-item" onclick="nav('alerts')"><span class="nav-icon">◐</span> Alerts <span id="alerts-badge-nav"></span></div>
+      <div class="nav-item" onclick="nav('misc')"><span class="nav-icon">⚑</span> Uncategorized <span id="misc-badge-nav"></span></div>
 
-    <div class="nav-section">Track</div>
-    <div class="nav-item" onclick="nav('misc')"><span class="nav-icon">⚑</span> Uncategorized</div>
-    <div class="nav-item" onclick="nav('weekly')"><span class="nav-icon">◫</span> This Week</div>
-    <div class="nav-item" onclick="nav('monthly')"><span class="nav-icon">◳</span> Monthly P&L</div>
-    <div class="nav-item" onclick="nav('transactions')"><span class="nav-icon">↕</span> Transactions</div>
-    <div class="nav-item" onclick="nav('reports')"><span class="nav-icon">▲</span> Reports</div>
+      <!-- TRACK -->
+      <div class="nav-section-hdr" onclick="toggleNavSection('nav-track')">
+        <span>Track</span><span class="nav-sec-chevron" id="chev-nav-track">▾</span>
+      </div>
+      <div class="nav-section-body" id="nav-track">
+        <div class="nav-item" onclick="nav('weekly')"><span class="nav-icon">◫</span> This Week</div>
+        <div class="nav-item" onclick="nav('monthly')"><span class="nav-icon">◳</span> Monthly P&L</div>
+        <div class="nav-item" onclick="nav('transactions')"><span class="nav-icon">↕</span> Transactions</div>
+        <div class="nav-item" onclick="nav('reports')"><span class="nav-icon">▲</span> Reports</div>
+        <div class="nav-item" onclick="nav('calendar')"><span class="nav-icon">▦</span> Bill Calendar</div>
+      </div>
 
-    <div class="nav-section">Money</div>
-    <div class="nav-item" onclick="nav('recurring')"><span class="nav-icon">↺</span> Recurring</div>
-    <div class="nav-item" onclick="nav('debts')"><span class="nav-icon">◎</span> Debts</div>
-    <div class="nav-item" onclick="nav('networth')"><span class="nav-icon">◑</span> Net Worth</div>
-    <div class="nav-item" onclick="nav('goals')"><span class="nav-icon">◉</span> Goals</div>
+      <!-- MONEY -->
+      <div class="nav-section-hdr" onclick="toggleNavSection('nav-money')">
+        <span>Money</span><span class="nav-sec-chevron" id="chev-nav-money">▾</span>
+      </div>
+      <div class="nav-section-body" id="nav-money">
+        <div class="nav-item" onclick="nav('debts')"><span class="nav-icon">◎</span> Debts</div>
+        <div class="nav-item" onclick="nav('recurring')"><span class="nav-icon">↺</span> Recurring</div>
+        <div class="nav-item" onclick="nav('networth')"><span class="nav-icon">◑</span> Net Worth</div>
+        <div class="nav-item" onclick="nav('goals')"><span class="nav-icon">◉</span> Goals</div>
+      </div>
 
-    <div class="nav-section">Budget</div>
-    <div class="nav-item" onclick="nav('needs')"><span class="nav-icon">⬡</span> Needs</div>
-    <div class="nav-item" onclick="nav('wants')"><span class="nav-icon">◈</span> Wants</div>
-    <div class="nav-item" onclick="nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
-    <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Plan</div>
-    <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
+      <!-- BUDGET -->
+      <div class="nav-section-hdr" onclick="toggleNavSection('nav-budget')">
+        <span>Budget</span><span class="nav-sec-chevron" id="chev-nav-budget">▾</span>
+      </div>
+      <div class="nav-section-body" id="nav-budget">
+        <div class="nav-item" onclick="nav('needs')"><span class="nav-icon">⬡</span> Needs</div>
+        <div class="nav-item" onclick="nav('wants')"><span class="nav-icon">◈</span> Wants</div>
+        <div class="nav-item" onclick="nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
+        <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Plan</div>
+        <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
+      </div>
+    </nav>
 
     <div class="sidebar-bottom">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer" onclick="DB.token ? DB.disconnect() : DB.showSetup()" title="Click to manage Dropbox sync">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer" onclick="DB.token ? DB.disconnect() : DB.showSetup()" title="Click to manage Dropbox sync">
         <div id="db-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s"></div>
         <div id="db-status" style="font-size:11px;color:var(--muted)">Not connected</div>
       </div>
       <div class="month-badge" style="margin-bottom:8px">
         <select id="globalMonth" onchange="changeMonth(this.value)"></select>
       </div>
-      <div style="display:flex;gap:5px">
-        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="openImport()" title="Import CSV">⬆ Import</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="exportData()" title="Backup to file">↓ Backup</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="DB.showSetup()" title="Dropbox sync settings">☁ Sync</button>
-      </div>
-      <div style="margin-top:6px">
-        <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px" onclick="document.getElementById('restore-file').click()" title="Restore from backup">↑ Restore Backup</button>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:10px" onclick="openImport()">⬆ Import</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:10px" onclick="exportData()">↓ Backup</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:10px" onclick="DB.showSetup()">☁ Sync</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%;font-size:10px;margin-top:4px" onclick="document.getElementById('restore-file').click()">↑ Restore</button>
       </div>
   </div>
   </aside>
@@ -2651,8 +2690,13 @@ var DB = {
           'Dropbox-API-Arg': JSON.stringify({ path: path })
         }
       });
-      if (res.status === 409) return null; // file not found
-      if (!res.ok) { if (res.status === 401) { DB.clearToken(); DB.showSetup(); } return null; }
+      if (res.status === 409 || res.status === 404) return null; // file not found
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 400) {
+          DB.updateStatus('error', 'Token issue — click Sync to reconnect');
+        }
+        return null;
+      }
       var text = await res.text();
       return JSON.parse(text);
     } catch(e) { return null; }
@@ -2794,7 +2838,9 @@ var DB = {
     if (!test.ok) {
       DB.clearToken();
       document.getElementById('db-connect-btn').textContent = 'Connect';
-      showToast('Invalid token — check and try again');
+      var errMsg = test.status === 400 ? 'Token invalid or permissions not set — check Permissions tab in Dropbox app settings' :
+                   test.status === 401 ? 'Token expired — generate a new one' : 'Connection failed (' + test.status + ')';
+      showToast(errMsg);
       return;
     }
     var user = await test.json();
@@ -3332,17 +3378,13 @@ nav = function(page) {
 
 
 function updateAlertBadge() {
-  // Also badge the Uncategorized nav item
+  // Badge the Uncategorized nav item
   var miscCount = state.transactions ? state.transactions.filter(function(t){ return t.category === 'Other' || !t.category; }).length : 0;
-  document.querySelectorAll('.nav-item').forEach(function(el) {
-    if (el.getAttribute('onclick') && el.getAttribute('onclick').includes("'misc'")) {
-      var ex = el.querySelector('.misc-badge');
-      if (miscCount > 0) {
-        if (!ex) { var b = document.createElement('span'); b.className='misc-badge'; b.style.cssText='background:var(--amber2);color:#000;border-radius:999px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:auto;font-family:var(--mono)'; el.appendChild(b); ex=b; }
-        ex.textContent = miscCount;
-      } else if (ex) { ex.remove(); }
-    }
-  });
+  var miscBadge = document.getElementById('misc-badge-nav');
+  if (miscBadge) {
+    miscBadge.textContent = miscCount > 0 ? miscCount : '';
+    miscBadge.style.cssText = miscCount > 0 ? 'background:var(--amber2);color:#000;border-radius:999px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:auto;font-family:var(--mono)' : '';
+  }
 
   // Count urgent alerts for badge
   var y = plMonth.year, m = plMonth.month;
@@ -5267,6 +5309,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   updateAlertBadge();
+  applyNavCollapsed();
   // Auto-connect Dropbox on load
   DB.init();
 });
