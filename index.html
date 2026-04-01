@@ -341,6 +341,28 @@ select.form-input option{background:var(--navy2);color:var(--white)}
   0%,100%{opacity:1} 50%{opacity:.3}
 }
 
+
+/* ─── COLLAPSIBLE GROUPS ────────────────────────────────────────── */
+.group-hdr{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;cursor:pointer;user-select:none;
+  border-bottom:1px solid var(--border);margin-bottom:4px;
+}
+.group-hdr:hover .group-hdr-label{color:var(--white)}
+.group-hdr-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:8px}
+.group-hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono);color:var(--muted)}
+.group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
+.group-chevron.open{transform:rotate(90deg)}
+.group-body{overflow:hidden;transition:max-height .25s ease}
+
+/* MONTH NAV on dashboard */
+.dash-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
+.dash-month-btn{background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:14px;font-family:var(--sans);transition:all .15s}
+.dash-month-btn:hover{color:var(--white);border-color:var(--teal)}
+.dash-month-label{font-size:16px;font-weight:600;font-family:var(--mono);min-width:110px;text-align:center;color:var(--white)}
+.dash-month-today{font-size:11px;color:var(--teal2);cursor:pointer;padding:3px 8px;border-radius:6px;background:rgba(11,181,137,.1)}
+.dash-month-today:hover{background:rgba(11,181,137,.2)}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -393,11 +415,16 @@ select.form-input option{background:var(--navy2);color:var(--white)}
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="page-title">Dashboard</div>
-      <div class="page-sub" id="dash-sub">Loading...</div>
+      <div class="dash-month-nav">
+        <button class="dash-month-btn" onclick="dashPrevMonth()">←</button>
+        <div class="dash-month-label" id="dash-month-label"></div>
+        <button class="dash-month-btn" onclick="dashNextMonth()">→</button>
+        <div class="dash-month-today" onclick="dashGoToday()" id="dash-today-btn" style="display:none">Today</div>
+      </div>
       <div class="cards-grid" id="dash-cards"></div>
       <div class="section">
         <div class="section-hdr">
-          <div class="section-title">Monthly spend vs budget</div>
+          <div class="section-title">Spend vs budget</div>
         </div>
         <div id="dash-progress"></div>
       </div>
@@ -1193,6 +1220,142 @@ function nextMonth() {
 }
 
 
+
+// ─── DASHBOARD MONTH NAV ──────────────────────────────────────────────────────
+
+function dashPrevMonth() {
+  var m = plMonth.month - 1, y = plMonth.year;
+  if (m < 0) { m = 11; y--; }
+  plMonth = { year: y, month: m };
+  // Sync global month selector
+  var sel = document.getElementById('globalMonth');
+  if (sel) {
+    var val = y + '-' + m;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === val) { sel.selectedIndex = i; break; }
+    }
+  }
+  window.dashFilter = null;
+  renderDashboard();
+}
+
+function dashNextMonth() {
+  var m = plMonth.month + 1, y = plMonth.year;
+  if (m > 11) { m = 0; y++; }
+  plMonth = { year: y, month: m };
+  var sel = document.getElementById('globalMonth');
+  if (sel) {
+    var val = y + '-' + m;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === val) { sel.selectedIndex = i; break; }
+    }
+  }
+  window.dashFilter = null;
+  renderDashboard();
+}
+
+function dashGoToday() {
+  var now = new Date();
+  plMonth = { year: now.getFullYear(), month: now.getMonth() };
+  var sel = document.getElementById('globalMonth');
+  if (sel) {
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].selected === false) {
+        var val = now.getFullYear() + '-' + now.getMonth();
+        if (sel.options[i].value === val) { sel.selectedIndex = i; break; }
+      }
+    }
+  }
+  window.dashFilter = null;
+  renderDashboard();
+}
+
+// ─── GROUPED COLLAPSIBLE PROGRESS ─────────────────────────────────────────────
+
+// Track which groups are collapsed — persisted
+function getCollapsed() {
+  try { return JSON.parse(localStorage.getItem('collapsed_groups') || '{}'); } catch(e) { return {}; }
+}
+function setCollapsed(obj) { localStorage.setItem('collapsed_groups', JSON.stringify(obj)); }
+
+function toggleGroup(groupId) {
+  var collapsed = getCollapsed();
+  collapsed[groupId] = !collapsed[groupId];
+  setCollapsed(collapsed);
+  // Re-render just the progress section
+  var y = plMonth.year, m = plMonth.month;
+  var prog = document.getElementById('dash-progress');
+  if (prog) prog.innerHTML = renderGroupedProgress(y, m);
+}
+
+function renderGroupedProgress(y, m) {
+  var collapsed = getCollapsed();
+
+  // Build groups from needs + wants
+  var groups = [
+    { id: 'housing',   label: 'Housing & Debt',  items: state.needs.filter(function(n){ return n.group === 'Housing'; }) },
+    { id: 'utilities', label: 'Utilities',        items: state.needs.filter(function(n){ return n.group === 'Utilities'; }) },
+    { id: 'transport', label: 'Transport',        items: state.needs.filter(function(n){ return n.group === 'Transport'; }) },
+    { id: 'food',      label: 'Food & Home',      items: state.needs.filter(function(n){ return n.group === 'Food & Home'; }) },
+    { id: 'kids',      label: 'Kids',             items: state.needs.filter(function(n){ return n.group === 'Kids'; }) },
+    { id: 'other',     label: 'Other Needs',      items: state.needs.filter(function(n){ return n.group === 'Other'; }) },
+    { id: 'wants',     label: 'Wants',            items: state.wants },
+  ].filter(function(g){ return g.items.length > 0; });
+
+  var html = '';
+
+  groups.forEach(function(g) {
+    var isOpen = !collapsed[g.id];
+    var groupBudget = g.items.reduce(function(s,c){ return s + c.amt; }, 0);
+    var groupSpent  = g.items.reduce(function(s,c){ return s + spentInMonth(c.name, y, m); }, 0);
+    var groupPct    = groupBudget > 0 ? Math.min(Math.round(groupSpent/groupBudget*100), 100) : 0;
+    var groupOver   = groupSpent > groupBudget;
+
+    html += '<div style="margin-bottom:12px">';
+
+    // Group header
+    html += '<div class="group-hdr" onclick="toggleGroup(\'' + g.id + '\')">' +
+      '<div class="group-hdr-label">' +
+        '<span class="group-chevron ' + (isOpen ? 'open' : '') + '">›</span>' +
+        g.label +
+      '</div>' +
+      '<div class="group-hdr-right">' +
+        '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
+          '<div style="height:100%;width:' + groupPct + '%;background:' + (groupOver?'var(--red)':groupPct>80?'var(--amber)':'var(--teal)') + ';border-radius:999px"></div>' +
+        '</div>' +
+        '<span style="color:' + (groupOver?'var(--red2)':'var(--muted)') + '">' + fmtInt(groupSpent) + ' / ' + fmtInt(groupBudget) + '</span>' +
+        (groupOver ? '<span style="color:var(--red2);font-size:10px">OVER</span>' : '') +
+      '</div>' +
+    '</div>';
+
+    // Group body — individual items
+    var maxH = isOpen ? (g.items.length * 60) + 'px' : '0px';
+    html += '<div class="group-body" style="max-height:' + maxH + '">';
+
+    g.items.forEach(function(cat) {
+      var spent = spentInMonth(cat.name, y, m);
+      var pct   = cat.amt > 0 ? Math.min(Math.round(spent/cat.amt*100), 100) : 0;
+      var over  = spent > cat.amt;
+      html += '<div class="progress-wrap" style="padding-left:16px;margin-bottom:10px">' +
+        '<div class="progress-label">' +
+          '<span style="font-size:12px">' + cat.name + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;color:' + (over?'var(--red2)':'var(--muted)') + '">' +
+            fmtInt(spent) + ' / ' + fmtInt(cat.amt) +
+            (over ? ' <span style="color:var(--red2)">OVER</span>' : '') +
+          '</span>' +
+        '</div>' +
+        '<div class="progress-track" style="height:5px">' +
+          '<div class="progress-fill ' + barClass(pct) + '" style="width:' + pct + '%"></div>' +
+        '</div>' +
+      '</div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  return html;
+}
+
 // ─── DASHBOARD CARD FILTER ────────────────────────────────────────────────────
 
 window.dashFilter = null;
@@ -1295,7 +1458,14 @@ function renderDashboard() {
   }
     var y = plMonth.year, m = plMonth.month;
   var label = monthStr(y, m);
-  document.getElementById('dash-sub').textContent = label + ' — real-time vs budget';
+  // Update month nav label
+  var mnLabel = document.getElementById('dash-month-label');
+  if (mnLabel) mnLabel.textContent = label;
+  // Show 'Today' button if not on current month
+  var now = new Date();
+  var isCurrent = (y === now.getFullYear() && m === now.getMonth());
+  var todayBtn = document.getElementById('dash-today-btn');
+  if (todayBtn) todayBtn.style.display = isCurrent ? 'none' : 'block';
 
   var totalBudget = state.needs.reduce((s,n) => s+n.amt, 0) + state.wants.reduce((s,w) => s+w.amt, 0);
   var totalSpent = state.transactions
@@ -1326,17 +1496,9 @@ function renderDashboard() {
     '</div>';
   }).join('');
 
-  // Progress bars for top categories
+  // Progress bars — grouped and collapsible
   var prog = document.getElementById('dash-progress');
-  var topCats = [...state.wants, ...state.needs.filter(n => ['Groceries & Household','Fuel','Dining Out'].includes(n.name))];
-  var rows = '';
-  topCats.slice(0,6).forEach(cat => {
-    var spent = spentInMonth(cat.name, y, m);
-    var pct = Math.min(Math.round(spent/cat.amt*100), 100);
-    var over = spent > cat.amt;
-    rows += '<div class="progress-wrap"><div class="progress-label"><span>' + cat.name + '</span><span style="font-family:var(--mono);font-size:12px">' + fmtInt(spent) + ' / ' + fmtInt(cat.amt) + (over ? ' <span style="color:var(--red2)">OVER</span>' : '') + '</span></div><div class="progress-track"><div class="progress-fill ' + barClass(pct) + '" style="width:' + pct + '%"></div></div></div>';
-  });
-  prog.innerHTML = rows;
+  if (prog) prog.innerHTML = renderGroupedProgress(y, m);
 
   // Recent transactions — filtered by active card
   renderDashTx(y, m);
