@@ -2301,7 +2301,7 @@ function renderNeeds() {
     var gid = 'needs-' + g.toLowerCase().replace(/[^a-z]/g,'');
     var isOpen = !collapsed[gid];
     var subtotal = groups[g].reduce(function(s,n){ return s+n.amt; }, 0);
-    rows += '<tr class="subhdr" onclick="toggleGroup('' + gid + '')" style="cursor:pointer;user-select:none">' +
+    rows += '<tr class="subhdr" onclick="toggleGroup(\'' + gid + '\')" style="cursor:pointer;user-select:none">' +
       '<td style="display:flex;align-items:center;gap:8px">' +
         '<span style="font-size:10px;transition:transform .2s;display:inline-block;' + (isOpen?'transform:rotate(90deg)':'') + '">›</span>' +
         g +
