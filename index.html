@@ -2293,31 +2293,30 @@ function renderNeeds() {
     groups[n.group].push(Object.assign({}, n, {idx: i}));
   });
   groupOrder = groupOrder.filter(function(v,i,a){ return a.indexOf(v)===i; });
-
   var total = state.needs.reduce(function(s,n){ return s+n.amt; }, 0);
-  var rows = '';
-
+  var html = '';
   groupOrder.forEach(function(g) {
     var gid = 'needs-' + g.toLowerCase().replace(/[^a-z]/g,'');
     var isOpen = !collapsed[gid];
     var subtotal = groups[g].reduce(function(s,n){ return s+n.amt; }, 0);
-    rows += '<tr class="subhdr" onclick="toggleGroup(\'' + gid + '\')" style="cursor:pointer;user-select:none">' +
-      '<td style="display:flex;align-items:center;gap:8px">' +
-        '<span style="font-size:10px;transition:transform .2s;display:inline-block;' + (isOpen?'transform:rotate(90deg)':'') + '">›</span>' +
-        g +
-      '</td>' +
-      '<td class="r" style="font-family:var(--mono);color:var(--teal2)">' + fmtInt(subtotal) + '/mo</td>' +
-      '<td class="muted" style="font-size:11px">' + groups[g].length + ' items</td>' +
-      '<td></td>' +
-    '</tr>';
+    var chevron = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+    html += '<tr class="subhdr" onclick="toggleGroup(\'' + gid + '\')" style="cursor:pointer;user-select:none">';
+    html += '<td style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;transition:transform .2s;display:inline-block;transform:' + chevron + '">&#x203A;</span>' + g + '</td>';
+    html += '<td class="r" style="font-family:var(--mono);color:var(--teal2)">' + fmtInt(subtotal) + '/mo</td>';
+    html += '<td class="muted" style="font-size:11px">' + groups[g].length + ' items</td><td></td></tr>';
     if (isOpen) {
       groups[g].forEach(function(n) {
-        rows += '<tr><td style="padding-left:1.5rem">' + n.name + '</td><td class="r">' + fmtInt(n.amt) + '</td><td class="muted">' + (n.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditBudget('need',' + n.idx + ')">Edit</button></td></tr>';
+        html += '<tr>';
+        html += '<td style="padding-left:1.5rem">' + n.name + '</td>';
+        html += '<td class="r">' + fmtInt(n.amt) + '</td>';
+        html += '<td class="muted">' + (n.notes||'') + '</td>';
+        html += '<td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'need\',' + n.idx + ')">Edit</button></td>';
+        html += '</tr>';
       });
     }
   });
-  rows += '<tr class="total-row"><td colspan="2">Total Needs</td><td class="r">' + fmtInt(total) + '</td><td></td></tr>';
-  document.getElementById('needs-tbl').innerHTML = rows;
+  html += '<tr class="total-row"><td colspan="2">Total Needs</td><td class="r">' + fmtInt(total) + '</td><td></td></tr>';
+  document.getElementById('needs-tbl').innerHTML = html;
 }
 
 function renderWants() {
