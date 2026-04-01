@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><text y=%27.9em%27 font-size=%2790%27>💰</text></svg>">
 <title>Budget Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -3243,8 +3244,8 @@ function overrideCat(idx, newCat) {
           '<span style="color:var(--muted)">' + row.description.slice(0,30) + ' &gt; $</span>' +
           '<input id="amtrule-thresh-' + idx + '" type="number" value="25" style="width:50px;background:var(--card2);border:1px solid var(--border);color:var(--white);border-radius:4px;padding:2px 5px;font-size:11px;margin:0 4px"> ' +
           '<span style="color:var(--muted)">→ Fuel &nbsp;&nbsp; below → ' + newCat + ' &nbsp;&nbsp;</span>' +
-          '<button onclick="applyAmtRule(' + idx + ','' + newCat + '')" style="background:var(--teal);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer">Apply rule</button>' +
-          '<button onclick="document.getElementById('amt-rule-prompt-' + idx + '').remove()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-left:6px">skip</button>' +
+          '<button onclick="applyAmtRule(' + idx + ',&quot;' + newCat + '&quot;)" style="background:var(--teal);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer">Apply rule</button>' +
+          '<button onclick="document.getElementById(\'amt-rule-prompt-' + idx + '\').remove()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-left:6px">skip</button>' +
         '</td>';
         tr.parentNode.insertBefore(promptRow, tr.nextSibling);
       }
