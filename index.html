@@ -352,37 +352,35 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="logo-name" id="app-owner">Budget Tracker</div>
       <div class="logo-sub" id="app-year">Personal Finance</div>
     </div>
-    <div class="nav-section">Overview</div>
+
     <div class="nav-item active" onclick="nav('dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
     <div class="nav-item" onclick="nav('weekly')"><span class="nav-icon">◫</span> This Week</div>
     <div class="nav-item" onclick="nav('monthly')"><span class="nav-icon">◳</span> Monthly P&L</div>
-
-    <div class="nav-section">Manage</div>
     <div class="nav-item" onclick="nav('transactions')"><span class="nav-icon">↕</span> Transactions</div>
+
+    <div class="nav-section">Budget</div>
     <div class="nav-item" onclick="nav('needs')"><span class="nav-icon">⬡</span> Needs</div>
     <div class="nav-item" onclick="nav('wants')"><span class="nav-icon">◉</span> Wants</div>
     <div class="nav-item" onclick="nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
-
-    <div class="nav-section">Data</div>
-    <div class="nav-item" onclick="openImport()"><span class="nav-icon">⬆</span> Import CSV</div>
-    <div class="nav-section">Reference</div>
-    <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Budget Plan</div>
+    <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Plan</div>
     <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
 
     <div class="sidebar-bottom">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer" onclick="DB.token ? DB.disconnect() : DB.showSetup()" title="Click to manage sync">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer" onclick="DB.token ? DB.disconnect() : DB.showSetup()" title="Click to manage Dropbox sync">
         <div id="db-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s"></div>
         <div id="db-status" style="font-size:11px;color:var(--muted)">Not connected</div>
       </div>
-      <div class="month-badge">
+      <div class="month-badge" style="margin-bottom:8px">
         <select id="globalMonth" onchange="changeMonth(this.value)"></select>
       </div>
-    
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="exportData()" title="Download local backup">↓ Backup</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="DB.token ? DB.showSetup() : DB.showSetup()" title="Dropbox settings">☁ Sync</button>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="openImport()" title="Import CSV">⬆ Import</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="exportData()" title="Backup to file">↓ Backup</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="DB.showSetup()" title="Dropbox sync settings">☁ Sync</button>
       </div>
-
+      <div style="margin-top:6px">
+        <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px" onclick="document.getElementById('restore-file').click()" title="Restore from backup">↑ Restore Backup</button>
+      </div>
   </div>
   </aside>
 
@@ -2144,8 +2142,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
       <div style="height:1px;background:var(--border);margin:.5rem 0"></div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');openImport()"><span class="nav-icon">⬆</span> Import CSV</div>
-      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');exportData()"><span class="nav-icon">↓</span> Export Data</div>
-      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');document.getElementById('restore-file').click()"><span class="nav-icon">↑</span> Restore Backup</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');exportData()"><span class="nav-icon">↓</span> Backup</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');document.getElementById('restore-file').click()"><span class="nav-icon">↑</span> Restore</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');DB.showSetup()"><span class="nav-icon">☁</span> Dropbox Sync</div>
     </div>
   </div>
 </div>
