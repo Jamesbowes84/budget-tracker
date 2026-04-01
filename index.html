@@ -2788,8 +2788,15 @@ var DB = {
 
   pendingSave: false,
 
+  failCount: 0,
+
   doSave: async function() {
     if (!DB.token || DB.saving) return;
+    if (DB.failCount >= 3) {
+      // Stop hammering after 3 consecutive failures — token is bad
+      DB.updateStatus('error', 'Token invalid — click Sync');
+      return;
+    }
 
     // Offline check
     if (!navigator.onLine) {
@@ -2801,11 +2808,17 @@ var DB = {
     DB.saving = true;
     DB.pendingSave = false;
     var ok = await DB.upload(DB.FILE_PATH, state);
-    // Save both override types
     var combinedOverrides = { flat: loadOverrides(), amount: loadAmountRules() };
     await DB.upload(DB.OVERRIDE_PATH, combinedOverrides);
     DB.saving = false;
-    DB.updateStatus(ok ? 'connected' : 'error', ok ? '' : 'Retry when online');
+
+    if (ok) {
+      DB.failCount = 0;
+      DB.updateStatus('connected');
+    } else {
+      DB.failCount++;
+      DB.updateStatus('error', 'Token issue — click Sync (' + DB.failCount + '/3)');
+    }
   },
 
   onOnline: function() {
@@ -3131,27 +3144,43 @@ function parseCC(text) {
 
 function resolveCategory(desc, amount) {
   var overrides = loadOverrides();
-  var key = overrideKey(desc);
+  var amtRules  = loadAmountRules();
+  var dUp = desc.toUpperCase().trim();
   var amt = parseFloat(amount) || 0;
 
-  // Check amount-based rules first (most specific)
-  var amtRules = loadAmountRules();
-  if (amtRules[key]) {
-    var rules = amtRules[key]; // sorted array of {threshold, op, category}
+  // Check rules — try exact key first, then "contains" match
+  var allOverrideKeys = Object.keys(overrides);
+  var allAmtKeys      = Object.keys(amtRules);
+
+  // Helper: does desc contain this key?
+  function keyMatches(k) {
+    return dUp.startsWith(k) || dUp.includes(k);
+  }
+
+  // Amount rules first (most specific)
+  var matchedAmtKey = amtRules[overrideKey(desc)] ? overrideKey(desc) :
+    allAmtKeys.find(function(k) { return k.length >= 4 && keyMatches(k); });
+  if (matchedAmtKey && amtRules[matchedAmtKey]) {
+    var rules = amtRules[matchedAmtKey];
     for (var i = 0; i < rules.length; i++) {
       var r = rules[i];
-      var match = (r.op === 'gt' && amt > r.threshold) ||
-                  (r.op === 'lt' && amt < r.threshold) ||
+      var match = (r.op === 'gt'  && amt >  r.threshold) ||
+                  (r.op === 'lt'  && amt <  r.threshold) ||
                   (r.op === 'gte' && amt >= r.threshold) ||
                   (r.op === 'lte' && amt <= r.threshold);
       if (match) return r.category;
     }
   }
 
-  // Fall back to flat vendor override
-  if (overrides[key]) return overrides[key];
+  // Flat override — exact key first, then contains
+  var exactKey = overrideKey(desc);
+  if (overrides[exactKey]) return overrides[exactKey];
+  var containsKey = allOverrideKeys.find(function(k) {
+    return k.length >= 4 && keyMatches(k);
+  });
+  if (containsKey) return overrides[containsKey];
 
-  // Fall back to keyword auto-categorize
+  // Auto-categorize by keyword
   return autoCategory(desc);
 }
 
@@ -3425,52 +3454,52 @@ function renderMisc() {
     return t.category === 'Other' || !t.category || t.category === 'Uncategorized';
   }).sort(function(a,b){ return b.date.localeCompare(a.date); });
 
-  // Unique vendors in uncategorized
+  // Group by extracted vendor name
   var vendors = {};
   uncategorized.forEach(function(t) {
-    var key = overrideKey(t.description);
-    if (!vendors[key]) vendors[key] = { desc: t.description, txs: [], totalAmt: 0 };
-    vendors[key].txs.push(t);
-    vendors[key].totalAmt += parseFloat(t.amount||0);
+    var vMatch = t.description.toUpperCase().match(/^([A-Z][A-Z0-9&. -]{2,18}?)(?:\s*[#*\d]|$)/);
+    var vKey = vMatch ? vMatch[1].trim() : t.description.toUpperCase().slice(0,20).trim();
+    if (!vendors[vKey]) vendors[vKey] = { desc: t.description, txs: [], totalAmt: 0 };
+    vendors[vKey].txs.push(t);
+    vendors[vKey].totalAmt += parseFloat(t.amount||0);
   });
 
   var cards = document.getElementById('misc-cards');
   if (cards) cards.innerHTML = [
     { label: 'Uncategorized', val: uncategorized.length, cls: uncategorized.length > 0 ? 'warn' : 'good' },
     { label: 'Unique vendors', val: Object.keys(vendors).length, cls: 'neutral' },
-    { label: 'Total amount', val: fmtInt(uncategorized.reduce(function(s,t){ return s+parseFloat(t.amount||0); },0)), cls: 'neutral' },
-    { label: 'Rules saved', val: Object.keys(loadOverrides()).length + Object.keys(loadAmountRules()).length, cls: 'good' },
+    { label: 'Total amount',   val: fmtInt(uncategorized.reduce(function(s,t){ return s+parseFloat(t.amount||0); },0)), cls: 'neutral' },
+    { label: 'Rules saved',    val: Object.keys(loadOverrides()).length + Object.keys(loadAmountRules()).length, cls: 'good' },
   ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div></div>'; }).join('');
 
   var tbody = document.getElementById('misc-tbl');
   if (!tbody) return;
 
   if (uncategorized.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">All clean — no uncategorized transactions</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">All clean — nothing to review</td></tr>';
     return;
   }
 
   var cats = allCategories();
   var catOpts = cats.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
 
-  var rows = uncategorized.slice(0, 100).map(function(t, i) {
-    var key = overrideKey(t.description);
-    var sameVendorCount = vendors[key] ? vendors[key].txs.length : 1;
-    return '<tr id="misc-row-' + t.id + '">' +
-      '<td class="muted">' + t.date + '</td>' +
-      '<td>' + t.description.slice(0,50) +
-        (sameVendorCount > 1 ? ' <span class="badge badge-warn">×' + sameVendorCount + '</span>' : '') +
-      '</td>' +
-      '<td class="r" style="font-family:var(--mono)">' + fmtInt(t.amount) + '</td>' +
-      '<td>' +
-        '<select id="misc-cat-' + t.id + '" class="form-input" style="padding:4px 8px;font-size:12px">' +
-        catOpts + '</select>' +
-      '</td>' +
-      '<td style="display:flex;gap:4px;flex-wrap:wrap">' +
-        '<button class="btn btn-primary btn-sm" onclick="miscApplyCat(' + t.id + ',false)" style="font-size:11px">Apply</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="miscApplyCat(' + t.id + ',true)" style="font-size:11px" title="Apply to all \'' + t.description.slice(0,20).replace(/'/g,"\\'") + '...\' transactions">Apply + Rule</button>' +
-      '</td>' +
-    '</tr>';
+  var rows = uncategorized.slice(0, 150).map(function(t) {
+    var vMatch = t.description.toUpperCase().match(/^([A-Z][A-Z0-9&. -]{2,18}?)(?:\s*[#*\d]|$)/);
+    var vKey = vMatch ? vMatch[1].trim() : t.description.toUpperCase().slice(0,20).trim();
+    var sameCount = vendors[vKey] ? vendors[vKey].txs.length : 1;
+
+    var row = '<tr id="misc-row-' + t.id + '">';
+    row += '<td class="muted" style="white-space:nowrap">' + t.date + '</td>';
+    row += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + t.description + '">' + t.description.slice(0,45);
+    if (sameCount > 1) row += ' <span class="badge badge-warn" title="' + sameCount + ' transactions contain &quot;' + vKey + '&quot;">x' + sameCount + '</span>';
+    row += '</td>';
+    row += '<td><select id="misc-cat-' + t.id + '" class="form-input" style="padding:4px 8px;font-size:12px">' + catOpts + '</select></td>';
+    row += '<td class="r" style="font-family:var(--mono);white-space:nowrap">' + fmtInt(t.amount) + '</td>';
+    row += '<td style="white-space:nowrap">';
+    row += '<button class="btn btn-ghost btn-sm" onclick="miscApplyCat(' + t.id + ',false)" style="font-size:11px;margin-right:4px" title="Fix this transaction only">Just this</button>';
+    row += '<button class="btn btn-primary btn-sm" onclick="miscApplyCat(' + t.id + ',true)" style="font-size:11px" title="Fix ALL transactions containing &quot;' + vKey + '&quot; and save rule for future imports">All &quot;' + vKey + '&quot; + Rule</button>';
+    row += '</td></tr>';
+    return row;
   }).join('');
 
   tbody.innerHTML = rows;
@@ -3482,29 +3511,37 @@ function miscApplyCat(txId, makeRule) {
   var selEl = document.getElementById('misc-cat-' + txId);
   if (!selEl) return;
   var newCat = selEl.value;
+  var dUp = tx.description.toUpperCase().trim();
+
+  // Extract the meaningful vendor prefix (first meaningful word chunk)
+  // e.g. "AMAZON MKTPL*BC7AJ3ZV2" -> "AMAZON"
+  //      "SHEETZ #1234 MEADVILLE" -> "SHEETZ"
+  var vendorMatch = dUp.match(/^([A-Z][A-Z0-9&\- ]{2,15}?)(?:\s*[#\*\d]|$)/);
+  var vendorKey = vendorMatch ? vendorMatch[1].trim() : overrideKey(tx.description);
 
   // Apply to this transaction
   tx.category = newCat;
 
+  var updatedCount = 1;
   if (makeRule) {
-    // Apply to ALL transactions with same vendor key
-    var key = overrideKey(tx.description);
+    // Retroactively apply to ALL transactions whose description contains vendorKey
     state.transactions.forEach(function(t) {
-      if (overrideKey(t.description) === key && (t.category === 'Other' || !t.category)) {
+      if (t.id === txId) return; // already done
+      if (t.description.toUpperCase().includes(vendorKey)) {
         t.category = newCat;
+        updatedCount++;
       }
     });
-    // Save flat override rule
+    // Save contains-style override rule
     var overrides = loadOverrides();
-    overrides[key] = newCat;
+    overrides[vendorKey] = newCat;
     saveOverrides(overrides);
-    showToast('Rule saved + ' + key.slice(0,20) + '... → ' + newCat);
+    showToast(updatedCount + ' transactions updated: "' + vendorKey + '" → ' + newCat);
   } else {
-    showToast('Category updated');
+    showToast('Category updated (this transaction only)');
   }
 
   saveState();
-  // Remove this row
   var row = document.getElementById('misc-row-' + txId);
   if (row) row.style.opacity = '0.3';
   setTimeout(renderMisc, 800);
@@ -5288,6 +5325,36 @@ function chartOpts(stacked) {
       y: { stacked: stacked, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { font: { size: 10 }, color: '#8A9BAE', callback: function(v){ return '$'+Math.round(v/1000)+'k'; } } }
     }
   };
+}
+
+
+// ─── COLLAPSIBLE NAV SECTIONS ─────────────────────────────────────────────────
+function getNavCollapsed() {
+  try { return JSON.parse(localStorage.getItem('nav_collapsed') || '{}'); } catch(e) { return {}; }
+}
+function toggleNavSection(id) {
+  var s = getNavCollapsed();
+  s[id] = !s[id];
+  localStorage.setItem('nav_collapsed', JSON.stringify(s));
+  applyNavCollapsed();
+}
+function applyNavCollapsed() {
+  var s = getNavCollapsed();
+  ['nav-track','nav-money','nav-budget'].forEach(function(id) {
+    var body = document.getElementById(id);
+    var chev = document.getElementById('chev-' + id);
+    if (!body) return;
+    var isCollapsed = !!s[id];
+    if (isCollapsed) {
+      body.style.maxHeight = '0';
+      body.style.overflow = 'hidden';
+      if (chev) chev.style.transform = 'rotate(-90deg)';
+    } else {
+      body.style.maxHeight = '500px';
+      body.style.overflow = 'hidden';
+      if (chev) chev.style.transform = 'rotate(0deg)';
+    }
+  });
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
