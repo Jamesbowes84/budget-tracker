@@ -1381,7 +1381,7 @@ function renderWeekly() {
     var over = spent > cat.budget;
     var active = window.weekFilter === cat.name;
     var fillClass = over ? 'fill-bad' : pct > 80 ? 'fill-warn' : 'fill-good';
-    return '<div class="week-card" onclick="weekCardClick('' + cat.name + '')" style="cursor:pointer;transition:all .15s;' + (active ? 'box-shadow:0 0 0 2px var(--teal2);' : '') + '">' +
+    return '<div class="week-card" onclick="weekCardClick(\'' + cat.name + '\')" style="cursor:pointer;transition:all .15s;' + (active ? 'box-shadow:0 0 0 2px var(--teal2);' : '') + '">' +
       '<div class="week-cat">' + cat.name + '</div>' +
       '<div class="week-budget" style="color:' + (over?'var(--red2)':pct>80?'var(--amber2)':'var(--white)') + '">' + fmtInt(spent) + '</div>' +
       '<div class="week-spent">of ' + fmtInt(cat.budget) + (active ? ' ▲' : '') + '</div>' +
