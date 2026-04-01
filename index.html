@@ -2861,14 +2861,7 @@ function restoreData(e) {
       // Ask user if they have local data worth keeping
       var mode = 'replace';
       if (hasLocalData) {
-        var choice = confirm(
-          'You have ' + localTxCount + ' transactions locally.
-
-' +
-          'OK = Merge (keep local transactions + load backup settings)
-' +
-          'Cancel = Full replace (backup wins everything)'
-        );
+        var choice = confirm('You have ' + localTxCount + ' transactions locally.\n\nOK = Merge (keep local transactions + load backup settings)\nCancel = Full replace (backup wins everything)');
         mode = choice ? 'merge' : 'replace';
       }
 
