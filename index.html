@@ -423,7 +423,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="section">
         <div class="section-hdr">
           <div class="section-title">This week's transactions</div>
-          <button class="btn btn-primary btn-sm" onclick="openAddTx()">+ Add</button>
+          <button class="section-action btn btn-primary btn-sm" onclick="openAddTx()">+ Add</button>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -1361,27 +1361,73 @@ function syncWeeklyCats() {
   });
 }
 
+// Track active week card filter
+window.weekFilter = null;
+
+function weekCardClick(catName) {
+  window.weekFilter = (window.weekFilter === catName) ? null : catName;
+  renderWeekly();
+}
+
 function renderWeekly() {
   syncWeeklyCats();
   var w = getWeekBounds();
   document.getElementById('week-label').textContent = 'Week of ' + w.start + ' — ' + w.end;
 
   var grid = document.getElementById('week-cards');
-  grid.innerHTML = WEEKLY_CATS.map(cat => {
+  grid.innerHTML = WEEKLY_CATS.map(function(cat) {
     var spent = spentInWeek(cat.name);
     var pct = Math.min(Math.round(spent/cat.budget*100), 100);
     var over = spent > cat.budget;
+    var active = window.weekFilter === cat.name;
     var fillClass = over ? 'fill-bad' : pct > 80 ? 'fill-warn' : 'fill-good';
-    return '<div class="week-card"><div class="week-cat">' + cat.name + '</div><div class="week-budget" style="color:' + (over?'var(--red2)':pct>80?'var(--amber2)':'var(--white)') + '">' + fmtInt(spent) + '</div><div class="week-spent">of ' + fmtInt(cat.budget) + '</div><div class="week-bar"><div class="week-fill ' + fillClass + '" style="width:' + pct + '%"></div></div></div>';
+    return '<div class="week-card" onclick="weekCardClick('' + cat.name + '')" style="cursor:pointer;transition:all .15s;' + (active ? 'box-shadow:0 0 0 2px var(--teal2);' : '') + '">' +
+      '<div class="week-cat">' + cat.name + '</div>' +
+      '<div class="week-budget" style="color:' + (over?'var(--red2)':pct>80?'var(--amber2)':'var(--white)') + '">' + fmtInt(spent) + '</div>' +
+      '<div class="week-spent">of ' + fmtInt(cat.budget) + (active ? ' ▲' : '') + '</div>' +
+      '<div class="week-bar"><div class="week-fill ' + fillClass + '" style="width:' + pct + '%"></div></div>' +
+    '</div>';
   }).join('');
 
-  // This week's transactions
-  var txs = state.transactions.filter(txInWeek).sort((a,b) => b.date.localeCompare(a.date));
+  // Filtered transactions
+  var allTxs = state.transactions.filter(txInWeek).sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var filtered = window.weekFilter
+    ? allTxs.filter(function(t) { return t.category === window.weekFilter; })
+    : allTxs;
+
+  // Update section title
+  var hdr = document.querySelector('#page-weekly .section-title');
+  if (hdr) hdr.textContent = window.weekFilter ? ('Transactions — ' + window.weekFilter) : "This week's transactions";
+
+  // Update action button
+  var action = document.querySelector('#page-weekly .section-action');
+  if (action) {
+    if (window.weekFilter) {
+      action.textContent = '✕ Clear filter';
+      action.onclick = function() { window.weekFilter = null; renderWeekly(); };
+    } else {
+      action.textContent = '+ Add';
+      action.onclick = openAddTx;
+    }
+  }
+
   var tbody = document.getElementById('week-tx');
-  if (txs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">No transactions this week yet</td></tr>';
+  if (!tbody) return;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">' +
+      (window.weekFilter ? 'No ' + window.weekFilter + ' transactions this week' : 'No transactions this week yet') +
+      '</td></tr>';
   } else {
-    tbody.innerHTML = txs.map(t => '<tr><td class="muted">' + t.date + '</td><td>' + t.description + '</td><td><span class="badge badge-muted">' + (t.category||'') + '</span></td><td class="r">' + (t.type==='income'?'<span style="color:var(--teal2)">+':'<span>-') + fmt(t.amount) + '</span></td><td><button class="btn btn-ghost btn-sm" onclick="openEditTx(' + t.id + ')">Edit</button></td></tr>').join('');
+    tbody.innerHTML = filtered.map(function(t) {
+      return '<tr>' +
+        '<td class="muted">' + t.date + '</td>' +
+        '<td>' + t.description + '</td>' +
+        '<td><span class="badge badge-muted">' + (t.category||'') + '</span></td>' +
+        '<td class="r">' + (t.type==='income'?'<span style="color:var(--teal2)">+':'<span>-') + fmt(t.amount) + '</span></td>' +
+        '<td><button class="btn btn-ghost btn-sm" onclick="openEditTx(' + t.id + ')">Edit</button></td>' +
+      '</tr>';
+    }).join('');
   }
 }
 
