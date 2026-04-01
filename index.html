@@ -4138,7 +4138,7 @@ function renderCalendar() {
   var y = calMonth.year, m = calMonth.month;
   document.getElementById('cal-month-label').textContent = monthStr(y, m);
 
-  var bills = getRecurringForMonth(y, m);
+  var bills = getMonthBills(y, m);
   var totalOut = bills.filter(function(b){ return b.group !== 'income'; }).reduce(function(s,b){ return s+b.amount; }, 0);
   var totalIn  = bills.filter(function(b){ return b.group === 'income'; }).reduce(function(s,b){ return s+b.amount; }, 0);
   var biggestDay = bills.reduce(function(m,b){ return b.amount > m.amount && b.group !== 'income' ? b : m; }, {amount:0});
@@ -4250,7 +4250,7 @@ function renderAlerts() {
     var dStr = dateOffset(i);
     var bills = getRecurringForDate(dStr).filter(function(b){ return b.type !== 'income'; });
     bills.forEach(function(b) {
-      upcoming.push({ icon:'📅', title: b.desc + ' due ' + dateFmt(dStr), body: fmtInt(Math.abs(b.amount)) + ' — ' + i + ' day' + (i>1?'s':'') + ' away', cls:'info' });
+      upcoming.push({ icon:'📅', title: (b.desc||b.name||'Bill') + ' due ' + dateFmt(dStr), body: fmtInt(Math.abs(b.amount)) + ' — ' + i + ' day' + (i>1?'s':'') + ' away', cls:'info' });
     });
   }
 
