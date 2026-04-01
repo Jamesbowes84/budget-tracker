@@ -448,6 +448,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
     <div class="nav-item" onclick="nav('alerts')"><span class="nav-icon">◐</span> Alerts</div>
 
     <div class="nav-section">Track</div>
+    <div class="nav-item" onclick="nav('misc')"><span class="nav-icon">⚑</span> Uncategorized</div>
     <div class="nav-item" onclick="nav('weekly')"><span class="nav-icon">◫</span> This Week</div>
     <div class="nav-item" onclick="nav('monthly')"><span class="nav-icon">◳</span> Monthly P&L</div>
     <div class="nav-item" onclick="nav('transactions')"><span class="nav-icon">↕</span> Transactions</div>
@@ -643,7 +644,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="page-title">Budget Plan</div>
       <div class="page-sub">Your complete budget at a glance</div>
       <div class="cards-grid">
-        <div class="stat-card good"><div class="stat-label">Income</div><div class="stat-val">$6,248</div><div class="stat-note">MOM Brands payroll</div></div>
+        <div class="stat-card good"><div class="stat-label">Income</div><div class="stat-val">$6,248</div><div class="stat-note">Monthly income</div></div>
         <div class="stat-card neutral"><div class="stat-label">Needs</div><div class="stat-val" id="plan-needs-val">$4,285</div><div class="stat-note" id="plan-needs-pct">69% of income</div></div>
         <div class="stat-card warn"><div class="stat-label">Wants</div><div class="stat-val" id="plan-wants-val">$1,133</div><div class="stat-note" id="plan-wants-pct">18% of income</div></div>
         <div class="stat-card good"><div class="stat-label">CC Paydown</div><div class="stat-val" id="plan-left-val">$530</div><div class="stat-note">~10 months to zero</div></div>
@@ -1013,6 +1014,26 @@ select.form-input option{background:var(--navy2);color:var(--white)}
           <thead><tr><th>Name</th><th>Schedule</th><th>Category</th><th class="r">Est. Amount</th><th class="r">Variance</th><th>Until</th><th></th></tr></thead>
           <tbody id="rec-variable"></tbody>
         </table></div>
+      </div>
+    </div>
+
+  
+    <!-- MISC / UNCATEGORIZED REVIEW -->
+    <div class="page" id="page-misc">
+      <div class="page-title">Uncategorized Review</div>
+      <div class="page-sub">Transactions in "Other" — review and create rules so they auto-categorize next time</div>
+      <div class="cards-grid" id="misc-cards"></div>
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Needs review</div>
+          <button class="btn btn-ghost btn-sm" onclick="renderMisc()">↺ Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Assign category</th><th>Make rule</th></tr></thead>
+            <tbody id="misc-tbl"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1652,6 +1673,7 @@ function renderPage(page) {
   if (page === 'calendar')     renderCalendar();
   if (page === 'alerts')       renderAlerts();
   if (page === 'recurring')     renderRecurring();
+  if (page === 'misc')          renderMisc();
   updateAlertBadge();
 }
 
@@ -2263,20 +2285,38 @@ function renderTxPage() {
 // ─── NEEDS / WANTS ────────────────────────────────────────────────────────────
 
 function renderNeeds() {
+  var collapsed = getCollapsed();
   var groups = {};
-  state.needs.forEach((n, i) => {
-    if (!groups[n.group]) groups[n.group] = [];
-    groups[n.group].push({...n, idx: i});
+  var groupOrder = [];
+  state.needs.forEach(function(n, i) {
+    if (!groups[n.group]) { groups[n.group] = []; groupOrder.push(n.group); }
+    groups[n.group].push(Object.assign({}, n, {idx: i}));
   });
-  var total = state.needs.reduce((s,n) => s+n.amt, 0);
+  groupOrder = groupOrder.filter(function(v,i,a){ return a.indexOf(v)===i; });
+
+  var total = state.needs.reduce(function(s,n){ return s+n.amt; }, 0);
   var rows = '';
-  Object.keys(groups).forEach(g => {
-    rows += '<tr class="subhdr"><td colspan="4">' + g + '</td></tr>';
-    groups[g].forEach(n => {
-      rows += '<tr><td>' + n.name + '</td><td class="r">' + fmtInt(n.amt) + '</td><td class="muted">' + (n.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'need\','+n.idx+')">Edit</button></td></tr>';
-    });
+
+  groupOrder.forEach(function(g) {
+    var gid = 'needs-' + g.toLowerCase().replace(/[^a-z]/g,'');
+    var isOpen = !collapsed[gid];
+    var subtotal = groups[g].reduce(function(s,n){ return s+n.amt; }, 0);
+    rows += '<tr class="subhdr" onclick="toggleGroup('' + gid + '')" style="cursor:pointer;user-select:none">' +
+      '<td style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:10px;transition:transform .2s;display:inline-block;' + (isOpen?'transform:rotate(90deg)':'') + '">›</span>' +
+        g +
+      '</td>' +
+      '<td class="r" style="font-family:var(--mono);color:var(--teal2)">' + fmtInt(subtotal) + '/mo</td>' +
+      '<td class="muted" style="font-size:11px">' + groups[g].length + ' items</td>' +
+      '<td></td>' +
+    '</tr>';
+    if (isOpen) {
+      groups[g].forEach(function(n) {
+        rows += '<tr><td style="padding-left:1.5rem">' + n.name + '</td><td class="r">' + fmtInt(n.amt) + '</td><td class="muted">' + (n.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditBudget('need',' + n.idx + ')">Edit</button></td></tr>';
+      });
+    }
   });
-  rows += '<tr class="total-row"><td>Total Needs</td><td class="r">' + fmtInt(total) + '</td><td colspan="2"></td></tr>';
+  rows += '<tr class="total-row"><td colspan="2">Total Needs</td><td class="r">' + fmtInt(total) + '</td><td></td></tr>';
   document.getElementById('needs-tbl').innerHTML = rows;
 }
 
@@ -3219,6 +3259,18 @@ nav = function(page) {
 
 
 function updateAlertBadge() {
+  // Also badge the Uncategorized nav item
+  var miscCount = state.transactions ? state.transactions.filter(function(t){ return t.category === 'Other' || !t.category; }).length : 0;
+  document.querySelectorAll('.nav-item').forEach(function(el) {
+    if (el.getAttribute('onclick') && el.getAttribute('onclick').includes("'misc'")) {
+      var ex = el.querySelector('.misc-badge');
+      if (miscCount > 0) {
+        if (!ex) { var b = document.createElement('span'); b.className='misc-badge'; b.style.cssText='background:var(--amber2);color:#000;border-radius:999px;font-size:9px;font-weight:700;padding:1px 5px;margin-left:auto;font-family:var(--mono)'; el.appendChild(b); ex=b; }
+        ex.textContent = miscCount;
+      } else if (ex) { ex.remove(); }
+    }
+  });
+
   // Count urgent alerts for badge
   var y = plMonth.year, m = plMonth.month;
   var urgentCount = 0;
@@ -3250,68 +3302,102 @@ function updateAlertBadge() {
   });
 }
 
+
+// ─── MISC / UNCATEGORIZED REVIEW ──────────────────────────────────────────────
+
+function renderMisc() {
+  var uncategorized = state.transactions.filter(function(t) {
+    return t.category === 'Other' || !t.category || t.category === 'Uncategorized';
+  }).sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  // Unique vendors in uncategorized
+  var vendors = {};
+  uncategorized.forEach(function(t) {
+    var key = overrideKey(t.description);
+    if (!vendors[key]) vendors[key] = { desc: t.description, txs: [], totalAmt: 0 };
+    vendors[key].txs.push(t);
+    vendors[key].totalAmt += parseFloat(t.amount||0);
+  });
+
+  var cards = document.getElementById('misc-cards');
+  if (cards) cards.innerHTML = [
+    { label: 'Uncategorized', val: uncategorized.length, cls: uncategorized.length > 0 ? 'warn' : 'good' },
+    { label: 'Unique vendors', val: Object.keys(vendors).length, cls: 'neutral' },
+    { label: 'Total amount', val: fmtInt(uncategorized.reduce(function(s,t){ return s+parseFloat(t.amount||0); },0)), cls: 'neutral' },
+    { label: 'Rules saved', val: Object.keys(loadOverrides()).length + Object.keys(loadAmountRules()).length, cls: 'good' },
+  ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div></div>'; }).join('');
+
+  var tbody = document.getElementById('misc-tbl');
+  if (!tbody) return;
+
+  if (uncategorized.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">All clean — no uncategorized transactions</td></tr>';
+    return;
+  }
+
+  var cats = allCategories();
+  var catOpts = cats.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
+
+  var rows = uncategorized.slice(0, 100).map(function(t, i) {
+    var key = overrideKey(t.description);
+    var sameVendorCount = vendors[key] ? vendors[key].txs.length : 1;
+    return '<tr id="misc-row-' + t.id + '">' +
+      '<td class="muted">' + t.date + '</td>' +
+      '<td>' + t.description.slice(0,50) +
+        (sameVendorCount > 1 ? ' <span class="badge badge-warn">×' + sameVendorCount + '</span>' : '') +
+      '</td>' +
+      '<td class="r" style="font-family:var(--mono)">' + fmtInt(t.amount) + '</td>' +
+      '<td>' +
+        '<select id="misc-cat-' + t.id + '" class="form-input" style="padding:4px 8px;font-size:12px">' +
+        catOpts + '</select>' +
+      '</td>' +
+      '<td style="display:flex;gap:4px;flex-wrap:wrap">' +
+        '<button class="btn btn-primary btn-sm" onclick="miscApplyCat(' + t.id + ',false)" style="font-size:11px">Apply</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="miscApplyCat(' + t.id + ',true)" style="font-size:11px" title="Apply to all \'' + t.description.slice(0,20).replace(/'/g,"\\'") + '...\' transactions">Apply + Rule</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  tbody.innerHTML = rows;
+}
+
+function miscApplyCat(txId, makeRule) {
+  var tx = state.transactions.find(function(t){ return t.id === txId; });
+  if (!tx) return;
+  var selEl = document.getElementById('misc-cat-' + txId);
+  if (!selEl) return;
+  var newCat = selEl.value;
+
+  // Apply to this transaction
+  tx.category = newCat;
+
+  if (makeRule) {
+    // Apply to ALL transactions with same vendor key
+    var key = overrideKey(tx.description);
+    state.transactions.forEach(function(t) {
+      if (overrideKey(t.description) === key && (t.category === 'Other' || !t.category)) {
+        t.category = newCat;
+      }
+    });
+    // Save flat override rule
+    var overrides = loadOverrides();
+    overrides[key] = newCat;
+    saveOverrides(overrides);
+    showToast('Rule saved + ' + key.slice(0,20) + '... → ' + newCat);
+  } else {
+    showToast('Category updated');
+  }
+
+  saveState();
+  // Remove this row
+  var row = document.getElementById('misc-row-' + txId);
+  if (row) row.style.opacity = '0.3';
+  setTimeout(renderMisc, 800);
+}
+
 // ─── RECURRING RULES ──────────────────────────────────────────────────────────
 
-// James's pre-seeded recurring rules — built from 14 months of transaction data
-var DEFAULT_RECURRING = [
-  // INCOME
-  { name:'MOM Brands Paycheck', billType:'income', amount:3124, variance:0, category:'Income',
-    schedule:'biweekly', biweeklyStart:'2026-01-02', biweeklyDow:5,
-    start:'2025-01-01', end:'', notes:'Biweekly Friday direct deposit', active:true },
-
-  // HOUSING
-  { name:'Mortgage', billType:'fixed', amount:395, variance:0, category:'Mortgage',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'PNC', active:true },
-  { name:'Car Payment', billType:'fixed', amount:725, variance:0, category:'Car Payment',
-    schedule:'monthly', day:15, start:'2025-01-01', end:'', notes:'Bridgecrest', active:true },
-  { name:'Camper Loan', billType:'fixed', amount:162, variance:0, category:'Camper Loan',
-    schedule:'biweekly', biweeklyStart:'2026-01-02', biweeklyDow:5,
-    start:'2025-01-01', end:'', notes:'BofA — biweekly ~$162/payment', active:true },
-  { name:'Home Insurance', billType:'fixed', amount:1100, variance:0, category:'Home Insurance',
-    schedule:'annual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Annual set-aside', active:true },
-  { name:'Property Taxes', billType:'fixed', amount:2176, variance:0, category:'Property Taxes',
-    schedule:'semiannual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Crawford County — biannual', active:true },
-  { name:'Camper Insurance', billType:'fixed', amount:114, variance:0, category:'Camper Insurance',
-    schedule:'semiannual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Progressive Advanced — biannual $114', active:true },
-
-  // UTILITIES
-  { name:'Electric', billType:'variable', amount:125, variance:40, category:'Electric',
-    schedule:'monthly', day:20, start:'2025-01-01', end:'', notes:'Northwestern Rural Electric — varies $85-165', active:true },
-  { name:'Internet / Cable', billType:'fixed', amount:78, variance:0, category:'Internet / Cable',
-    schedule:'monthly', day:23, start:'2025-01-01', end:'', notes:'Armstrong', active:true },
-  { name:'AT&T Phone', billType:'fixed', amount:260, variance:5, category:'Phone',
-    schedule:'monthly', day:23, start:'2025-01-01', end:'', notes:'AT&T — 2 lines + truck hotspot. Device installments end 2028.', active:true },
-
-  // TRANSPORT
-  { name:'Auto Insurance', billType:'fixed', amount:176, variance:0, category:'Auto Insurance',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Progressive — 6-mo premium averaged', active:true },
-
-  // KIDS
-  { name:'Daycare & Son', billType:'variable', amount:358, variance:50, category:'Daycare & Son',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Katelyn Venmo — daycare, food, supplies', active:true },
-  { name:'Daughters Activities', billType:'variable', amount:85, variance:25, category:'Daughters \u2014 Activities',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Jessica Venmo — shared activity costs', active:true },
-  { name:'Band Equipment', billType:'fixed', amount:29, variance:0, category:'Daughters \u2014 Band Equip.',
-    schedule:'monthly', day:5, start:'2025-01-01', end:'2027-06-01', notes:'Sweetwater installment — oldest daughter', active:true },
-  { name:'Greenlight Allowance', billType:'variable', amount:104, variance:20, category:'Greenlight Allowance',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'$24/wk max — chore-based', active:true },
-  { name:'School Lunch', billType:'variable', amount:32, variance:10, category:'School Lunch',
-    schedule:'monthly', day:1, start:'2025-09-01', end:'2026-06-15', notes:'SchoolCafe — school year only', active:true },
-  { name:'GameChanger', billType:'fixed', amount:9, variance:0, category:'GameChanger',
-    schedule:'annual', annualMonth:3, day:1, start:'2025-01-01', end:'', notes:'Annual $106 — baseball season app', active:true },
-
-  // OTHER
-  { name:'Healthcare / Contacts', billType:'variable', amount:30, variance:20, category:'Healthcare',
-    schedule:'monthly', day:15, start:'2025-01-01', end:'', notes:'1-800 Contacts every 6mo + misc CVS', active:true },
-  { name:'Income Tax Reserve', billType:'fixed', amount:55, variance:0, category:'Income Taxes',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Set aside for TurboTax + IRS', active:true },
-
-  // SAVINGS
-  { name:'Credit Union Savings', billType:'fixed', amount:300, variance:0, category:'Other',
-    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Auto transfer — emergency fund', active:true },
-  { name:'CC Payment', billType:'fixed', amount:530, variance:0, category:'Other',
-    schedule:'monthly', day:5, start:'2025-01-01', end:'2026-12-01', notes:'Payoff autopay — gone ~Month 10', active:true },
-];
+var DEFAULT_RECURRING = [];  // Personal rules live in Dropbox — not hardcoded
 
 function initRecurring() {
   if (!state.recurring) {
@@ -3884,71 +3970,16 @@ var calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() };
 function calPrevMonth() { var m=calMonth.month-1,y=calMonth.year; if(m<0){m=11;y--;} calMonth={year:y,month:m}; renderCalendar(); }
 function calNextMonth() { var m=calMonth.month+1,y=calMonth.year; if(m>11){m=0;y++;} calMonth={year:y,month:m}; renderCalendar(); }
 
-function getMonthBills(y, m) {
-  var bills = [];
-  var daysInMonth = new Date(y, m+1, 0).getDate();
-
-  // Fixed need schedule
-  var schedule = [
-    { name:'Mortgage',              day:1,  group:'housing',   needs:'Mortgage' },
-    { name:'Property Taxes',        day:1,  group:'housing',   needs:'Property Taxes', biannual:true },
-    { name:'Home Insurance',        day:1,  group:'housing',   needs:'Home Insurance', annual:true },
-    { name:'Camper Insurance',      day:1,  group:'housing',   needs:'Camper Insurance', bimonthly:true },
-    { name:'Greenlight',            day:1,  group:'kids',      needs:'Greenlight Allowance' },
-    { name:'Daycare & Son',         day:1,  group:'kids',      needs:'Daycare & Son' },
-    { name:'School Lunch',          day:1,  group:'kids',      needs:'School Lunch' },
-    { name:'GameChanger',           day:1,  group:'kids',      needs:'GameChanger' },
-    { name:'Daughters Activities',  day:1,  group:'kids',      needs:'Daughters \u2014 Activities' },
-    { name:'Car Payment',           day:15, group:'housing',   needs:'Car Payment' },
-    { name:'Auto Insurance',        day:1,  group:'transport', needs:'Auto Insurance', bimonthly:true },
-    { name:'Electric',              day:20, group:'utilities', needs:'Electric' },
-    { name:'AT&T Phone',            day:23, group:'utilities', needs:'Phone' },
-    { name:'Armstrong Internet',    day:23, group:'utilities', needs:'Internet / Cable' },
-    { name:'Sweetwater Band',       day:5,  group:'kids',      needs:'Daughters \u2014 Band Equip.' },
-  ];
-
-  schedule.forEach(function(b) {
-    if (b.day > daysInMonth) return;
-    if (b.bimonthly && m % 2 !== 0) return;
-    if (b.biannual  && m !== 0 && m !== 6) return;
-    if (b.annual    && m !== 0) return;
-    var need = state.needs.find(function(n){ return n.name === b.needs; });
-    var amt = need ? need.amt : 0;
-    bills.push({ day: b.day, name: b.name, group: b.group, amount: amt });
+function getMonthBills(year, month) {
+  return getRecurringForMonth(year, month).map(function(item) {
+    var grp = 'other'; var cat = (item.category||'').toLowerCase();
+    if (item.type==='income') grp='income';
+    else if (cat.includes('mortgage')||cat.includes('car payment')||cat.includes('camper')||cat.includes('insurance')||cat.includes('tax')) grp='housing';
+    else if (cat.includes('electric')||cat.includes('internet')||cat.includes('phone')||cat.includes('cable')) grp='utilities';
+    else if (cat.includes('fuel')||cat.includes('auto')||cat.includes('transport')) grp='transport';
+    else if (cat.includes('kid')||cat.includes('daughter')||cat.includes('school')||cat.includes('greenlight')||cat.includes('daycare')||cat.includes('band')||cat.includes('lunch')||cat.includes('game')) grp='kids';
+    return {day:item.day,date:item.date,name:item.desc,group:grp,amount:Math.abs(item.amount),category:item.category,oneoff:item.oneoff||false};
   });
-
-  // Camper loan biweekly
-  var camper = state.needs.find(function(n){ return n.name === 'Camper Loan'; });
-  if (camper) {
-    var baseDate = new Date('2026-01-02');
-    for (var d = 1; d <= daysInMonth; d++) {
-      var dd = new Date(y, m, d);
-      var daysSince = Math.round((dd - baseDate) / 86400000);
-      if (daysSince >= 0 && daysSince % 14 === 0) {
-        bills.push({ day: d, name: 'Camper Loan', group: 'housing', amount: camper.amt/2 });
-      }
-    }
-  }
-
-  // Paychecks
-  var payBase = new Date('2026-01-02');
-  for (var d = 1; d <= daysInMonth; d++) {
-    var dd = new Date(y, m, d);
-    var daysSince = Math.round((dd - payBase) / 86400000);
-    if (daysSince >= 0 && daysSince % 14 === 0 && dd.getDay() === 5) {
-      bills.push({ day: d, name: 'Paycheck', group: 'income', amount: state.income/2 });
-    }
-  }
-
-  // One-off day items this month
-  (state.dayItems||[]).forEach(function(item) {
-    var d = new Date(item.date + 'T00:00:00');
-    if (d.getFullYear() === y && d.getMonth() === m) {
-      bills.push({ day: d.getDate(), name: item.desc, group: item.type === 'income' ? 'income' : 'other', amount: item.amount, oneoff: true });
-    }
-  });
-
-  return bills.sort(function(a,b){ return a.day - b.day; });
 }
 
 function renderCalendar() {
@@ -4240,59 +4271,7 @@ function dateFmt(str) {
   return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getDate();
 }
 
-function getScheduledBills(dateStr) {
-  var items = [];
-  var d = new Date(dateStr + 'T00:00:00');
-  var dayOfMonth = d.getDate();
-  var month = d.getMonth();
 
-  var billSchedule = {
-    'Mortgage':             { day: 1,  bimonthly: false, biannual: false, annual: false },
-    'Car Payment':          { day: 15, bimonthly: false, biannual: false, annual: false },
-    'Electric':             { day: 20, bimonthly: false, biannual: false, annual: false },
-    'Internet / Cable':     { day: 23, bimonthly: false, biannual: false, annual: false },
-    'Phone':                { day: 23, bimonthly: false, biannual: false, annual: false },
-    'Greenlight Allowance': { day: 1,  bimonthly: false, biannual: false, annual: false },
-    'School Lunch':         { day: 1,  bimonthly: false, biannual: false, annual: false },
-    'Daycare & Son':        { day: 1,  bimonthly: false, biannual: false, annual: false },
-    'Daughters — Activities':{ day: 1, bimonthly: false, biannual: false, annual: false },
-    'Auto Insurance':       { day: 1,  bimonthly: true,  biannual: false, annual: false },
-    'Home Insurance':       { day: 1,  bimonthly: false, biannual: false, annual: true  },
-    'Property Taxes':       { day: 1,  bimonthly: false, biannual: true,  annual: false },
-  };
-
-  // Camper loan — biweekly
-  var camperNeed = state.needs.find(function(n){ return n.name === 'Camper Loan'; });
-  if (camperNeed) {
-    var baseDate = new Date('2026-01-02');
-    var msPerDay = 86400000;
-    var daysSinceBase = Math.round((d - baseDate) / msPerDay);
-    if (daysSinceBase >= 0 && daysSinceBase % 14 === 0) {
-      items.push({ desc: 'Camper Loan', amount: -(camperNeed.amt / 2), type: 'bill', confirmed: false });
-    }
-  }
-
-  Object.keys(billSchedule).forEach(function(name) {
-    var bill = billSchedule[name];
-    var need = state.needs.find(function(n) { return n.name === name; });
-    if (!need) return;
-    if (dayOfMonth !== bill.day) return;
-    if (bill.bimonthly && month % 2 !== 0) return;
-    if (bill.biannual  && month !== 0 && month !== 6) return;
-    if (bill.annual    && month !== 0) return;
-    items.push({ desc: name, amount: -need.amt, type: 'bill', confirmed: false });
-  });
-
-  // Paycheck — biweekly Fridays
-  var payBase = new Date('2026-01-02');
-  var msPerDay = 86400000;
-  var daysSinceBase = Math.round((d - payBase) / msPerDay);
-  if (daysSinceBase >= 0 && daysSinceBase % 14 === 0 && d.getDay() === 5) {
-    items.push({ desc: 'MOM Brands Paycheck', amount: state.income / 2, type: 'income', confirmed: false });
-  }
-
-  return items;
-}
 
 function buildDayEvents(days, todayStr) {
   var dayEvents = {};
@@ -4665,12 +4644,7 @@ function deleteDayItem() {
 
 function initDebts() {
   if (!state.debts) {
-    state.debts = [
-      { name: "Mortgage",      type: "mortgage",     balance: 0, original: 0, rate: 0,    payment: 395,  notes: "PNC" },
-      { name: "Car Payment",   type: "loan",         balance: 0, original: 0, rate: 0,    payment: 725,  notes: "Bridgecrest" },
-      { name: "Camper Loan",   type: "loan",         balance: 0, original: 0, rate: 0,    payment: 325,  notes: "BofA biweekly" },
-      { name: "Credit Card",   type: "credit_card",  balance: 5000, original: 5000, rate: 24, payment: 530,  notes: "~24% APR" },
-    ];
+    state.debts = [];
     saveState();
   }
 }
