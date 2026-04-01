@@ -453,6 +453,12 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .nav-section-body { overflow:hidden;transition:max-height .25s ease; }
 .nav-section-body.collapsed { max-height:0!important; }
 
+
+.cal-more-btn { font-size:9px;color:var(--teal2);cursor:pointer;padding:1px 0;user-select:none }
+.cal-more-btn:hover { color:var(--white); }
+.cal-bill[onclick] { cursor:pointer!important }
+.cal-bill[onclick]:hover { filter:brightness(1.3);transform:translateX(1px); }
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -4300,10 +4306,24 @@ function renderCalendar() {
     var cls = 'cal-day' + (isToday ? ' today' : '');
     html += '<div class="' + cls + '">';
     html += '<div class="cal-day-num">' + d + '</div>';
-    dayBills.slice(0,3).forEach(function(b){
-      html += '<div class="cal-bill cal-bill-' + b.group + '" title="' + b.name + ' ' + fmtInt(b.amount) + '">' + b.name + '</div>';
+    var shown = dayBills.slice(0, 3);
+    var overflow = dayBills.slice(3);
+    shown.forEach(function(b) {
+      var recIdx = calFindRecurringIdx(b.name);
+      var onclick = recIdx >= 0 ? ' onclick="calEditRule(' + recIdx + ')"' : '';
+      html += '<div class="cal-bill cal-bill-' + b.group + '"' + onclick + ' title="' + b.name + ' ' + fmtInt(b.amount) + '">' + b.name + '</div>';
     });
-    if (dayBills.length > 3) html += '<div style="font-size:9px;color:var(--muted)">+' + (dayBills.length-3) + ' more</div>';
+    if (overflow.length > 0) {
+      var overId = 'ov-' + y + '-' + (m+1) + '-' + d;
+      html += '<div class="cal-more-btn" onclick="calExpandDay('' + overId + '')">+' + overflow.length + ' more &#9662;</div>';
+      html += '<div id="' + overId + '" style="display:none">';
+      overflow.forEach(function(b) {
+        var recIdx = calFindRecurringIdx(b.name);
+        var onclick = recIdx >= 0 ? ' onclick="calEditRule(' + recIdx + ')"' : '';
+        html += '<div class="cal-bill cal-bill-' + b.group + '"' + onclick + ' title="' + b.name + ' ' + fmtInt(b.amount) + '">' + b.name + '</div>';
+      });
+      html += '</div>';
+    }
     html += '</div>';
   }
 
@@ -4337,6 +4357,31 @@ function renderCalendar() {
     }).join('') || '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No bills this month</td></tr>';
   }
 }
+
+function calFindRecurringIdx(billName) {
+  if (!state.recurring) return -1;
+  return state.recurring.findIndex(function(r){ return r.name === billName; });
+}
+
+function calEditRule(idx) {
+  // Switch to recurring page and open edit modal
+  nav('recurring');
+  setTimeout(function() { openEditRecurring(idx); }, 150);
+}
+
+function calExpandDay(overId, dayId) {
+  var overflowEl = document.getElementById(overId);
+  var moreBtn    = document.getElementById(overId + '-more');
+  if (!overflowEl) return;
+  var isOpen = overflowEl.style.display !== 'none';
+  overflowEl.style.display = isOpen ? 'none' : 'block';
+  if (moreBtn) moreBtn.textContent = isOpen ? '+' + overflowEl.children.length + ' more ▾' : '▴ less';
+  // Expand the day cell height if needed
+  var dayEl = document.getElementById(dayId);
+  if (dayEl) dayEl.style.minHeight = isOpen ? '' : 'auto';
+}
+
+
 
 // ─── ALERTS ───────────────────────────────────────────────────────────────────
 
@@ -5468,6 +5513,29 @@ function applyNavCollapsed() {
       if (chev) chev.style.transform = 'rotate(0deg)';
     }
   });
+}
+
+
+function calFindRecurringIdx(billName) {
+  if (!state.recurring) return -1;
+  for (var i = 0; i < state.recurring.length; i++) {
+    if (state.recurring[i].name === billName) return i;
+  }
+  return -1;
+}
+
+function calEditRule(idx) {
+  nav('recurring');
+  setTimeout(function() { openEditRecurring(idx); }, 200);
+}
+
+function calExpandDay(overId) {
+  var el = document.getElementById(overId);
+  var btn = el ? el.previousElementSibling : null;
+  if (!el) return;
+  var isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  if (btn) btn.innerHTML = isOpen ? '+' + el.children.length + ' more &#9662;' : '&#9652; less';
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
