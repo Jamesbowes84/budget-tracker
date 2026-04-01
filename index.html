@@ -1109,7 +1109,14 @@ select.form-input option{background:var(--navy2);color:var(--white)}
         <option value="income">Income</option>
       </select>
     </div>
+    <div id="tx-rule-option" style="display:none;margin-bottom:.75rem;padding:.75rem;background:rgba(14,138,110,.08);border-radius:8px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+        <input type="checkbox" id="tx-apply-rule" style="cursor:pointer">
+        <span>Also apply this category to all other <strong id="tx-vendor-label">matching</strong> transactions + save as rule</span>
+      </label>
+    </div>
     <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="tx-delete-btn" onclick="deleteTx()" style="display:none">Delete</button>
       <button class="btn btn-ghost" onclick="closeModal('modal-tx')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTx()">Save</button>
     </div>
@@ -2463,16 +2470,19 @@ function openAddTx() {
   document.getElementById('tx-desc').value = '';
   document.getElementById('tx-amt').value = '';
   document.getElementById('tx-type').value = 'expense';
-
-  // Populate categories
+  var ruleOpt = document.getElementById('tx-rule-option');
+  var deleteBtn = document.getElementById('tx-delete-btn');
+  if (ruleOpt) ruleOpt.style.display = 'none';
+  if (deleteBtn) deleteBtn.style.display = 'none';
   var sel = document.getElementById('tx-cat');
-  sel.innerHTML = allCategories().map(c => '<option value="' + c + '">' + c + '</option>').join('');
-
+  sel.innerHTML = allCategories().map(function(c){
+    return '<option value="' + c + '">' + c + '</option>';
+  }).join('');
   document.getElementById('modal-tx').classList.add('open');
 }
 
 function openEditTx(id) {
-  var tx = state.transactions.find(t => t.id === id);
+  var tx = state.transactions.find(function(t){ return t.id === id; });
   if (!tx) return;
   editTxId = id;
   document.getElementById('modal-tx-title').textContent = 'Edit Transaction';
@@ -2482,7 +2492,22 @@ function openEditTx(id) {
   document.getElementById('tx-type').value = tx.type;
 
   var sel = document.getElementById('tx-cat');
-  sel.innerHTML = allCategories().map(c => '<option value="' + c + '" ' + (c===tx.category?'selected':'') + '>' + c + '</option>').join('');
+  sel.innerHTML = allCategories().map(function(c){
+    return '<option value="' + c + '"' + (c===tx.category?' selected':'') + '>' + c + '</option>';
+  }).join('');
+
+  // Show "apply to all" option for existing transactions
+  var ruleOpt = document.getElementById('tx-rule-option');
+  var deleteBtn = document.getElementById('tx-delete-btn');
+  if (ruleOpt) {
+    ruleOpt.style.display = 'block';
+    var vMatch = tx.description.toUpperCase().match(/^([A-Z][A-Z0-9&. -]{2,18}?)(?:\s*[#*\d]|$)/);
+    var vendor = vMatch ? vMatch[1].trim() : tx.description.slice(0,20);
+    var vendorLabel = document.getElementById('tx-vendor-label');
+    if (vendorLabel) vendorLabel.textContent = '"' + vendor + '"';
+    document.getElementById('tx-apply-rule').checked = false;
+  }
+  if (deleteBtn) deleteBtn.style.display = 'inline-block';
 
   document.getElementById('modal-tx').classList.add('open');
 }
@@ -2497,18 +2522,50 @@ function saveTx() {
   if (!date || !desc || isNaN(amt) || amt <= 0) { showToast('Fill in all fields'); return; }
 
   if (editTxId !== null) {
-    var tx = state.transactions.find(t => t.id === editTxId);
+    var tx = state.transactions.find(function(t){ return t.id === editTxId; });
     if (tx) { tx.date=date; tx.description=desc; tx.category=cat; tx.amount=amt; tx.type=type; }
+
+    // Apply to all + save rule if checkbox checked
+    var applyRule = document.getElementById('tx-apply-rule');
+    if (applyRule && applyRule.checked && tx) {
+      var dUp = desc.toUpperCase().trim();
+      var vMatch = dUp.match(/^([A-Z][A-Z0-9&. -]{2,18}?)(?:\s*[#*\d]|$)/);
+      var vendorKey = vMatch ? vMatch[1].trim() : dUp.slice(0,20);
+      var count = 0;
+      state.transactions.forEach(function(t) {
+        if (t.id === editTxId) return;
+        if (t.description.toUpperCase().includes(vendorKey)) {
+          t.category = cat;
+          count++;
+        }
+      });
+      var overrides = loadOverrides();
+      overrides[vendorKey] = cat;
+      saveOverrides(overrides);
+      showToast(count + 1 + ' transactions updated + rule saved for "' + vendorKey + '"');
+    }
   } else {
     state.transactions.push({
       id: Date.now(),
-      date, description: desc, category: cat, amount: amt, type
+      date: date, description: desc, category: cat, amount: amt, type: type
     });
   }
 
   saveState();
   closeModal('modal-tx');
-  showToast(editTxId ? 'Transaction updated' : 'Transaction added');
+  if (!(document.getElementById('tx-apply-rule') && document.getElementById('tx-apply-rule').checked)) {
+    showToast(editTxId ? 'Transaction updated' : 'Transaction added');
+  }
+  renderPage(currentPage);
+}
+
+function deleteTx() {
+  if (editTxId === null) return;
+  if (!confirm('Delete this transaction?')) return;
+  state.transactions = state.transactions.filter(function(t){ return t.id !== editTxId; });
+  saveState();
+  closeModal('modal-tx');
+  showToast('Transaction deleted');
   renderPage(currentPage);
 }
 
@@ -3563,9 +3620,13 @@ function miscApplyCat(txId, makeRule) {
   }
 
   saveState();
+  // Remove the row immediately
   var row = document.getElementById('misc-row-' + txId);
-  if (row) row.style.opacity = '0.3';
-  setTimeout(renderMisc, 800);
+  if (row) row.remove();
+  // Update the badge count
+  updateAlertBadge();
+  // Re-render the misc page fully
+  renderMisc();
 }
 
 function showUndoBar(vendorKey, newCat, count) {
