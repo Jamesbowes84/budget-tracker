@@ -342,6 +342,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 }
 
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -357,6 +358,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
     <div class="nav-item" onclick="nav('weekly')"><span class="nav-icon">◫</span> This Week</div>
     <div class="nav-item" onclick="nav('monthly')"><span class="nav-icon">◳</span> Monthly P&L</div>
     <div class="nav-item" onclick="nav('transactions')"><span class="nav-icon">↕</span> Transactions</div>
+    <div class="nav-item" onclick="nav('reports')"><span class="nav-icon">▲</span> Reports</div>
 
     <div class="nav-section">Budget</div>
     <div class="nav-item" onclick="nav('needs')"><span class="nav-icon">⬡</span> Needs</div>
@@ -568,6 +570,81 @@ select.form-input option{background:var(--navy2);color:var(--white)}
         <div class="form-row">
           <div class="form-group"><label class="form-label">Update CC balance</label><input class="form-input" id="cc-balance-input" type="number" placeholder="Current balance"></div>
           <button class="btn btn-primary" onclick="updateCCBalance()" style="margin-bottom:0;align-self:flex-end">Update</button>
+        </div>
+      </div>
+    </div>
+
+  
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="page-title">Reports</div>
+      <div class="page-sub">Spending trends, category drift, and P&L over time</div>
+
+      <!-- Summary cards -->
+      <div class="cards-grid" id="rpt-cards"></div>
+
+      <!-- Row 1: Monthly P&L bar chart -->
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Monthly P&L — income vs spend</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="form-input" id="rpt-months" onchange="renderReports()" style="padding:4px 8px;font-size:12px;width:auto">
+              <option value="6">Last 6 months</option>
+              <option value="12">Last 12 months</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="padding:1.25rem">
+          <canvas id="rpt-pl-chart" height="180"></canvas>
+          <div style="display:flex;gap:16px;margin-top:.75rem;flex-wrap:wrap" id="rpt-pl-legend"></div>
+        </div>
+      </div>
+
+      <!-- Row 2: Needs vs Wants stacked -->
+      <div class="cards-grid-2">
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Needs drift over time</div></div>
+          <div class="tbl-wrap" style="padding:1.25rem">
+            <canvas id="rpt-needs-chart" height="200"></canvas>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Wants drift over time</div></div>
+          <div class="tbl-wrap" style="padding:1.25rem">
+            <canvas id="rpt-wants-chart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Top categories donut -->
+      <div class="cards-grid-2">
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Spend by category</div><span style="font-size:11px;color:var(--muted)" id="rpt-donut-period"></span></div>
+          <div class="tbl-wrap" style="padding:1.25rem;display:flex;align-items:center;gap:1.5rem">
+            <canvas id="rpt-donut" width="180" height="180" style="flex-shrink:0"></canvas>
+            <div id="rpt-donut-legend" style="flex:1;font-size:12px"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Budget vs actual</div></div>
+          <div class="tbl-wrap" style="padding:.75rem 1rem">
+            <div id="rpt-budget-bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Full P&L table -->
+      <div class="section">
+        <div class="section-hdr"><div class="section-title">Month-by-month table</div></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Month</th><th class="r">Income</th><th class="r">Needs</th>
+              <th class="r">Wants</th><th class="r">Total Out</th><th class="r">Net</th>
+            </tr></thead>
+            <tbody id="rpt-pl-table"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -884,6 +961,7 @@ function renderPage(page) {
   if (page === 'subs')         renderSubs();
   if (page === 'budget')       renderBudgetPlan();
   if (page === 'roadmap')      renderRoadmap();
+  if (page === 'reports')      renderReports();
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -2086,6 +2164,285 @@ nav = function(page) {
   if (mobEl) mobEl.classList.add('active');
 };
 
+
+// ─── REPORTS ──────────────────────────────────────────────────────────────────
+
+var rptCharts = {};
+
+var PALETTE = [
+  '#0BB589','#F0A500','#534AB7','#E74C3C','#378ADD',
+  '#639922','#D4537E','#8A9BAE','#0E8A6E','#C47F00'
+];
+
+function getReportMonths() {
+  var sel = document.getElementById('rpt-months');
+  var val = sel ? sel.value : '6';
+  var now = new Date();
+  var months = [];
+  var count = val === 'all' ? 24 : parseInt(val);
+  for (var i = count - 1; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ year: d.getFullYear(), month: d.getMonth() });
+  }
+  return months;
+}
+
+function rptMonthLabel(mo) {
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo.month] + " '" + String(mo.year).slice(2);
+}
+
+function rptSpent(catName, mo) {
+  return state.transactions
+    .filter(function(t) { return t.category === catName && t.type === 'expense' && txInMonth(t, mo.year, mo.month); })
+    .reduce(function(s, t) { return s + parseFloat(t.amount || 0); }, 0);
+}
+
+function rptTotalSpent(mo) {
+  return state.transactions
+    .filter(function(t) { return t.type === 'expense' && txInMonth(t, mo.year, mo.month); })
+    .reduce(function(s, t) { return s + parseFloat(t.amount || 0); }, 0);
+}
+
+function rptIncome(mo) {
+  var actual = state.transactions
+    .filter(function(t) { return t.type === 'income' && txInMonth(t, mo.year, mo.month); })
+    .reduce(function(s, t) { return s + parseFloat(t.amount || 0); }, 0);
+  return actual || state.income;
+}
+
+function destroyChart(id) {
+  if (rptCharts[id]) { rptCharts[id].destroy(); delete rptCharts[id]; }
+}
+
+function renderReports() {
+  var months = getReportMonths();
+  var labels = months.map(rptMonthLabel);
+
+  // ── Summary cards
+  var totalInc   = months.reduce(function(s,m){ return s + rptIncome(m); }, 0);
+  var totalSpend = months.reduce(function(s,m){ return s + rptTotalSpent(m); }, 0);
+  var avgInc     = totalInc / months.length;
+  var avgSpend   = totalSpend / months.length;
+  var net        = totalInc - totalSpend;
+
+  var cards = document.getElementById('rpt-cards');
+  if (cards) cards.innerHTML = [
+    { label: 'Avg monthly income',  val: fmtInt(avgInc),   cls: 'good' },
+    { label: 'Avg monthly spend',   val: fmtInt(avgSpend), cls: avgSpend > avgInc ? 'bad' : 'neutral' },
+    { label: 'Period net',          val: (net>=0?'+':'-') + fmtInt(Math.abs(net)), cls: net >= 0 ? 'good' : 'bad' },
+    { label: 'Months tracked',      val: months.filter(function(m){ return rptTotalSpent(m) > 0; }).length + '/' + months.length, cls: 'neutral' },
+  ].map(function(c) {
+    return '<div class="stat-card ' + c.cls + '"><div class="stat-label">' + c.label + '</div><div class="stat-val">' + c.val + '</div></div>';
+  }).join('');
+
+  // ── P&L Bar Chart
+  var incData   = months.map(rptIncome);
+  var needsData = months.map(function(m) {
+    return state.needs.reduce(function(s,n){ return s + rptSpent(n.name, m); }, 0);
+  });
+  var wantsData = months.map(function(m) {
+    return state.wants.reduce(function(s,w){ return s + rptSpent(w.name, m); }, 0);
+  });
+  var otherData = months.map(function(m, i) {
+    var total = rptTotalSpent(m);
+    return Math.max(0, total - needsData[i] - wantsData[i]);
+  });
+
+  destroyChart('pl');
+  var plCtx = document.getElementById('rpt-pl-chart');
+  if (plCtx) {
+    rptCharts['pl'] = new Chart(plCtx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Income',  data: incData,   type: 'line', borderColor: '#0BB589', backgroundColor: 'transparent', borderWidth: 2.5, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#0BB589', order: 0 },
+          { label: 'Needs',   data: needsData, backgroundColor: 'rgba(11,181,137,.5)', stack: 's' },
+          { label: 'Wants',   data: wantsData, backgroundColor: 'rgba(240,165,0,.5)', stack: 's' },
+          { label: 'Other',   data: otherData, backgroundColor: 'rgba(138,155,174,.3)', stack: 's' },
+        ]
+      },
+      options: chartOpts(true)
+    });
+  }
+
+  // Legend
+  var legend = document.getElementById('rpt-pl-legend');
+  if (legend) legend.innerHTML = [
+    ['Income','#0BB589'],['Needs','rgba(11,181,137,.7)'],['Wants','rgba(240,165,0,.7)']
+  ].map(function(l){
+    return '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#8A9BAE"><div style="width:10px;height:10px;border-radius:2px;background:'+l[1]+'"></div>'+l[0]+'</div>';
+  }).join('');
+
+  // ── Needs drift line chart
+  var topNeeds = state.needs.slice().sort(function(a,b){ return b.amt-a.amt; }).slice(0,6);
+  destroyChart('needs');
+  var needsCtx = document.getElementById('rpt-needs-chart');
+  if (needsCtx) {
+    rptCharts['needs'] = new Chart(needsCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: topNeeds.map(function(cat, i) {
+          return {
+            label: cat.name,
+            data: months.map(function(m){ return rptSpent(cat.name, m); }),
+            borderColor: PALETTE[i % PALETTE.length],
+            backgroundColor: 'transparent',
+            borderWidth: 2, tension: 0.3, pointRadius: 2
+          };
+        })
+      },
+      options: chartOpts(false)
+    });
+  }
+
+  // ── Wants drift line chart
+  var topWants = state.wants.slice().sort(function(a,b){ return b.amt-a.amt; }).slice(0,6);
+  destroyChart('wants');
+  var wantsCtx = document.getElementById('rpt-wants-chart');
+  if (wantsCtx) {
+    rptCharts['wants'] = new Chart(wantsCtx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: topWants.map(function(cat, i) {
+          return {
+            label: cat.name,
+            data: months.map(function(m){ return rptSpent(cat.name, m); }),
+            borderColor: PALETTE[i % PALETTE.length],
+            backgroundColor: 'transparent',
+            borderWidth: 2, tension: 0.3, pointRadius: 2
+          };
+        })
+      },
+      options: chartOpts(false)
+    });
+  }
+
+  // ── Donut — spend by category (period total)
+  var catTotals = {};
+  state.transactions
+    .filter(function(t) {
+      return t.type === 'expense' && months.some(function(m){ return txInMonth(t, m.year, m.month); });
+    })
+    .forEach(function(t) {
+      catTotals[t.category] = (catTotals[t.category] || 0) + parseFloat(t.amount || 0);
+    });
+
+  var sortedCats = Object.keys(catTotals).sort(function(a,b){ return catTotals[b]-catTotals[a]; });
+  var top8 = sortedCats.slice(0, 8);
+  var otherTotal = sortedCats.slice(8).reduce(function(s,k){ return s+catTotals[k]; }, 0);
+  var donutLabels = top8.concat(otherTotal > 0 ? ['Other'] : []);
+  var donutData   = top8.map(function(k){ return catTotals[k]; }).concat(otherTotal > 0 ? [otherTotal] : []);
+  var donutTotal  = donutData.reduce(function(s,v){ return s+v; }, 0);
+
+  var sel = document.getElementById('rpt-months');
+  var periodEl = document.getElementById('rpt-donut-period');
+  if (periodEl && sel) periodEl.textContent = sel.value === 'all' ? 'all time' : 'last ' + sel.value + ' months';
+
+  destroyChart('donut');
+  var donutCtx = document.getElementById('rpt-donut');
+  if (donutCtx && donutData.length > 0) {
+    rptCharts['donut'] = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels: donutLabels,
+        datasets: [{ data: donutData, backgroundColor: PALETTE.concat(['#444']), borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: function(ctx){ return ' ' + ctx.label + ': ' + fmtInt(ctx.raw) + ' (' + Math.round(ctx.raw/donutTotal*100) + '%)'; } }
+        }}
+      }
+    });
+    var legend = document.getElementById('rpt-donut-legend');
+    if (legend) legend.innerHTML = donutLabels.map(function(l,i){
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">' +
+        '<div style="width:8px;height:8px;border-radius:50%;background:'+PALETTE[i]+'"></div>' +
+        '<span style="flex:1;color:#8A9BAE">' + l + '</span>' +
+        '<span style="font-family:var(--mono)">' + fmtInt(donutData[i]) + '</span></div>';
+    }).join('');
+  }
+
+  // ── Budget vs Actual horizontal bars
+  var allCats = state.needs.concat(state.wants);
+  var periodMonths = months.length;
+  var barsEl = document.getElementById('rpt-budget-bars');
+  if (barsEl) {
+    var sorted = allCats.slice().sort(function(a,b){
+      var aSpent = months.reduce(function(s,m){ return s+rptSpent(a.name,m); },0)/periodMonths;
+      var bSpent = months.reduce(function(s,m){ return s+rptSpent(b.name,m); },0)/periodMonths;
+      return bSpent - aSpent;
+    }).slice(0,10);
+
+    barsEl.innerHTML = sorted.map(function(cat) {
+      var avgSpent = months.reduce(function(s,m){ return s+rptSpent(cat.name,m); },0)/periodMonths;
+      var pct = cat.amt > 0 ? Math.min(Math.round(avgSpent/cat.amt*100), 130) : 0;
+      var over = avgSpent > cat.amt;
+      var barColor = over ? '#E74C3C' : pct > 80 ? '#F0A500' : '#0BB589';
+      return '<div style="margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:#8A9BAE;margin-bottom:3px">' +
+          '<span>' + cat.name + '</span>' +
+          '<span style="font-family:var(--mono);color:' + (over?'#E74C3C':'#8A9BAE') + '">' + fmtInt(avgSpent) + ' / ' + fmtInt(cat.amt) + '</span>' +
+        '</div>' +
+        '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden">' +
+          '<div style="height:100%;width:' + Math.min(pct,100) + '%;background:' + barColor + ';border-radius:999px;transition:width .4s"></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── P&L table
+  var tbody = document.getElementById('rpt-pl-table');
+  if (tbody) {
+    var rows = months.map(function(mo, i) {
+      var inc   = rptIncome(mo);
+      var needs = needsData[i];
+      var wants = wantsData[i];
+      var total = rptTotalSpent(mo);
+      var net   = inc - total;
+      var hasData = total > 0;
+      return '<tr style="opacity:' + (hasData?'1':'.35') + '">' +
+        '<td>' + rptMonthLabel(mo) + '</td>' +
+        '<td class="r" style="color:#0BB589">' + fmtInt(inc) + '</td>' +
+        '<td class="r">' + fmtInt(needs) + '</td>' +
+        '<td class="r">' + fmtInt(wants) + '</td>' +
+        '<td class="r">' + fmtInt(total) + '</td>' +
+        '<td class="r" style="color:' + (net>=0?'#0BB589':'#E74C3C') + '">' + (net>=0?'+':'-') + fmtInt(Math.abs(net)) + '</td>' +
+      '</tr>';
+    });
+    // Totals row
+    var tInc   = months.reduce(function(s,m){ return s+rptIncome(m); },0);
+    var tSpend = months.reduce(function(s,m){ return s+rptTotalSpent(m); },0);
+    var tNet   = tInc - tSpend;
+    rows.push('<tr style="font-weight:600;background:rgba(11,181,137,.06);border-top:1px solid rgba(255,255,255,.07)">' +
+      '<td>Total</td>' +
+      '<td class="r" style="color:#0BB589">' + fmtInt(tInc) + '</td>' +
+      '<td class="r">' + fmtInt(months.reduce(function(s,m,i){ return s+needsData[i]; },0)) + '</td>' +
+      '<td class="r">' + fmtInt(months.reduce(function(s,m,i){ return s+wantsData[i]; },0)) + '</td>' +
+      '<td class="r">' + fmtInt(tSpend) + '</td>' +
+      '<td class="r" style="color:' + (tNet>=0?'#0BB589':'#E74C3C') + '">' + (tNet>=0?'+':'-') + fmtInt(Math.abs(tNet)) + '</td>' +
+    '</tr>');
+    tbody.innerHTML = rows.join('');
+  }
+}
+
+function chartOpts(stacked) {
+  return {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12, color: '#8A9BAE' } },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: { stacked: stacked, grid: { display: false }, ticks: { font: { size: 10 }, color: '#8A9BAE' } },
+      y: { stacked: stacked, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { font: { size: 10 }, color: '#8A9BAE', callback: function(v){ return '$'+Math.round(v/1000)+'k'; } } }
+    }
+  };
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -2135,6 +2492,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="modal" style="width:280px;padding:1rem">
     <div style="font-size:13px;font-weight:600;margin-bottom:.75rem;color:var(--muted)">More</div>
     <div style="display:flex;flex-direction:column;gap:4px">
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('reports')"><span class="nav-icon">▲</span> Reports</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('needs')"><span class="nav-icon">⬡</span> Needs Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('wants')"><span class="nav-icon">◉</span> Wants Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
