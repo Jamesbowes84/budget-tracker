@@ -2854,13 +2854,93 @@ function restoreData(e) {
     try {
       var data = JSON.parse(ev.target.result);
       if (!data.state) throw new Error('Invalid backup file');
-      state = data.state;
-      saveState();
-      if (data.overrides) saveOverrides(data.overrides);
-      if (data.amountRules) saveAmountRules(data.amountRules);
+
+      var incoming = data.state;
+      var localTxCount = (state.transactions||[]).length;
+      var hasLocalData = localTxCount > 0;
+
+      // Ask user if they have local data worth keeping
+      var mode = 'replace';
+      if (hasLocalData) {
+        var choice = confirm(
+          'You have ' + localTxCount + ' transactions locally.
+
+' +
+          'OK = Merge (keep local transactions + load backup settings)
+' +
+          'Cancel = Full replace (backup wins everything)'
+        );
+        mode = choice ? 'merge' : 'replace';
+      }
+
+      if (mode === 'merge') {
+        // Settings from backup win (needs, wants, recurring, debts, subs, roadmap, income etc)
+        var keepLocally = ['transactions', 'goals', 'assets', 'nwHistory', 'dayItems'];
+        Object.keys(incoming).forEach(function(key) {
+          if (keepLocally.indexOf(key) === -1) {
+            state[key] = incoming[key];
+          }
+        });
+
+        // Merge transactions — dedupe by date+amount+description prefix
+        var existingTxs = state.transactions || [];
+        var incomingTxs = incoming.transactions || [];
+        var merged = existingTxs.slice();
+        var added = 0;
+        incomingTxs.forEach(function(t) {
+          var dupe = merged.some(function(ex) {
+            return ex.date === t.date &&
+              Math.abs(parseFloat(ex.amount) - parseFloat(t.amount)) < 0.01 &&
+              ex.description.slice(0,25) === t.description.slice(0,25);
+          });
+          if (!dupe) { merged.push(t); added++; }
+        });
+        state.transactions = merged;
+
+        // Merge goals, assets, NW history — append non-dupes
+        ['goals','assets'].forEach(function(key) {
+          var local = state[key] || [];
+          var inc   = incoming[key] || [];
+          inc.forEach(function(item) {
+            var dupe = local.some(function(l){ return l.name === item.name; });
+            if (!dupe) local.push(item);
+          });
+          state[key] = local;
+        });
+
+        // NW history — merge by date
+        var localHist = state.nwHistory || [];
+        var incHist   = incoming.nwHistory || [];
+        incHist.forEach(function(h) {
+          if (!localHist.some(function(l){ return l.date === h.date; })) {
+            localHist.push(h);
+          }
+        });
+        state.nwHistory = localHist.sort(function(a,b){ return a.date.localeCompare(b.date); });
+
+        saveState();
+        showToast('Merged — ' + added + ' new transactions added, settings updated');
+
+      } else {
+        // Full replace
+        state = incoming;
+        saveState();
+        showToast('Restored — ' + (state.transactions||[]).length + ' transactions loaded');
+      }
+
+      // Always merge overrides and amount rules
+      if (data.overrides) {
+        var merged = Object.assign({}, loadOverrides(), data.overrides);
+        saveOverrides(merged);
+      }
+      if (data.amountRules) {
+        var mergedAmt = Object.assign({}, loadAmountRules(), data.amountRules);
+        saveAmountRules(mergedAmt);
+      }
+
       document.getElementById('restore-file').value = '';
-      showToast('Backup restored — ' + (state.transactions||[]).length + ' transactions loaded');
       renderPage(currentPage);
+
     } catch(err) {
       showToast('Restore failed: ' + err.message);
     }
