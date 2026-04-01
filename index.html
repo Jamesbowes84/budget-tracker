@@ -454,6 +454,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
     <div class="nav-item" onclick="nav('reports')"><span class="nav-icon">▲</span> Reports</div>
 
     <div class="nav-section">Money</div>
+    <div class="nav-item" onclick="nav('recurring')"><span class="nav-icon">↺</span> Recurring</div>
     <div class="nav-item" onclick="nav('debts')"><span class="nav-icon">◎</span> Debts</div>
     <div class="nav-item" onclick="nav('networth')"><span class="nav-icon">◑</span> Net Worth</div>
     <div class="nav-item" onclick="nav('goals')"><span class="nav-icon">◉</span> Goals</div>
@@ -973,6 +974,48 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       </div>
     </div>
 
+  
+    <!-- RECURRING RULES -->
+    <div class="page" id="page-recurring">
+      <div class="page-title">Recurring Rules</div>
+      <div class="page-sub">Define your bills and income — auto-populates Day by Day and Bill Calendar</div>
+
+      <div class="cards-grid" id="rec-cards"></div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Income</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddRecurring('income')">+ Add</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Schedule</th><th>Category</th><th class="r">Amount</th><th>Until</th><th></th></tr></thead>
+          <tbody id="rec-income"></tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Fixed Bills</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddRecurring('fixed')">+ Add</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Schedule</th><th>Category</th><th class="r">Amount</th><th class="r">Variance</th><th>Until</th><th></th></tr></thead>
+          <tbody id="rec-fixed"></tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Variable / Estimated</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddRecurring('variable')">+ Add</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Schedule</th><th>Category</th><th class="r">Est. Amount</th><th class="r">Variance</th><th>Until</th><th></th></tr></thead>
+          <tbody id="rec-variable"></tbody>
+        </table></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1302,6 +1345,146 @@ select.form-input option{background:var(--navy2);color:var(--white)}
   </div>
 </div>
 
+
+<!-- RECURRING RULE MODAL -->
+<div class="modal-overlay" id="modal-recurring">
+  <div class="modal" style="width:520px">
+    <div class="modal-title" id="modal-recurring-title">Add Recurring Rule</div>
+    <input type="hidden" id="edit-rec-idx">
+
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label class="form-label">Name</label>
+        <input class="form-input" id="rec-name" placeholder="e.g. AT&T Bill, MOM Brands Paycheck">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="rec-bill-type">
+          <option value="fixed">Fixed Bill</option>
+          <option value="variable">Variable / Estimated</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Amount ($)</label>
+        <input class="form-input" id="rec-amount" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Variance ± ($)</label>
+        <input class="form-input" id="rec-variance" type="number" step="1" placeholder="0" title="Expected variation e.g. electric varies ±$30">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="rec-category"></select>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Schedule</label>
+      <select class="form-input" id="rec-schedule" onchange="recScheduleChanged()">
+        <option value="monthly">Monthly — same day each month</option>
+        <option value="biweekly">Every 2 weeks — from a start date</option>
+        <option value="weekly">Weekly — same day each week</option>
+        <option value="bimonthly">Twice a month — 2 specific days</option>
+        <option value="semiannual">Every 6 months</option>
+        <option value="annual">Once a year</option>
+      </select>
+    </div>
+
+    <!-- Monthly -->
+    <div id="rec-monthly-opts" style="margin-bottom:.75rem">
+      <label class="form-label">Day of month</label>
+      <input class="form-input" id="rec-day" type="number" min="1" max="31" placeholder="1" style="max-width:80px">
+    </div>
+
+    <!-- Biweekly -->
+    <div id="rec-biweekly-opts" style="display:none;margin-bottom:.75rem">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start date (known occurrence)</label>
+          <input class="form-input" id="rec-biweekly-start" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Day of week</label>
+          <select class="form-input" id="rec-biweekly-dow">
+            <option value="0">Sunday</option>
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5" selected>Friday</option>
+            <option value="6">Saturday</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Weekly -->
+    <div id="rec-weekly-opts" style="display:none;margin-bottom:.75rem">
+      <label class="form-label">Day of week</label>
+      <select class="form-input" id="rec-weekly-dow">
+        <option value="0">Sunday</option>
+        <option value="1">Monday</option>
+        <option value="2">Tuesday</option>
+        <option value="3">Wednesday</option>
+        <option value="4">Thursday</option>
+        <option value="5">Friday</option>
+        <option value="6">Saturday</option>
+      </select>
+    </div>
+
+    <!-- Bimonthly -->
+    <div id="rec-bimonthly-opts" style="display:none;margin-bottom:.75rem">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">First day</label>
+          <input class="form-input" id="rec-bim-day1" type="number" min="1" max="31" placeholder="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Second day</label>
+          <input class="form-input" id="rec-bim-day2" type="number" min="1" max="31" placeholder="15">
+        </div>
+      </div>
+    </div>
+
+    <!-- Semiannual / Annual -->
+    <div id="rec-annual-opts" style="display:none;margin-bottom:.75rem">
+      <label class="form-label">Month (1-12)</label>
+      <input class="form-input" id="rec-annual-month" type="number" min="1" max="12" placeholder="1" style="max-width:80px">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Start date</label>
+        <input class="form-input" id="rec-start" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">End date (optional)</label>
+        <input class="form-input" id="rec-end" type="date" placeholder="Leave blank = ongoing">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="rec-notes" placeholder="Account number, lender, details...">
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+      <input type="checkbox" id="rec-active" checked style="cursor:pointer">
+      <label for="rec-active" style="font-size:13px;cursor:pointer">Active</label>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="rec-delete-btn" onclick="deleteRecurring()" style="display:none">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-recurring')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRecurring()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- IMPORT MODAL -->
 <div class="modal-overlay" id="modal-import">
   <div class="modal" style="width:640px;max-height:90vh">
@@ -1468,6 +1651,7 @@ function renderPage(page) {
   if (page === 'goals')        renderGoals();
   if (page === 'calendar')     renderCalendar();
   if (page === 'alerts')       renderAlerts();
+  if (page === 'recurring')     renderRecurring();
   updateAlertBadge();
 }
 
@@ -2493,10 +2677,17 @@ var DB = {
     // Load overrides from Dropbox
     var cloudOverrides = await DB.download(DB.OVERRIDE_PATH);
     if (cloudOverrides) {
-      // Merge with local overrides
-      var local = loadOverrides();
-      var merged = Object.assign({}, local, cloudOverrides);
-      saveOverrides(merged);
+      if (cloudOverrides.flat) {
+        // New combined format
+        var merged = Object.assign({}, loadOverrides(), cloudOverrides.flat);
+        saveOverrides(merged);
+        var mergedAmt = Object.assign({}, loadAmountRules(), cloudOverrides.amount || {});
+        saveAmountRules(mergedAmt);
+      } else {
+        // Legacy flat format
+        var merged = Object.assign({}, loadOverrides(), cloudOverrides);
+        saveOverrides(merged);
+      }
     }
 
     // Render with fresh data
@@ -2526,7 +2717,9 @@ var DB = {
     DB.saving = true;
     DB.pendingSave = false;
     var ok = await DB.upload(DB.FILE_PATH, state);
-    await DB.upload(DB.OVERRIDE_PATH, loadOverrides());
+    // Save both override types
+    var combinedOverrides = { flat: loadOverrides(), amount: loadAmountRules() };
+    await DB.upload(DB.OVERRIDE_PATH, combinedOverrides);
     DB.saving = false;
     DB.updateStatus(ok ? 'connected' : 'error', ok ? '' : 'Retry when online');
   },
@@ -2597,10 +2790,11 @@ saveOverrides = function(o) {
 
 function exportData() {
   var data = {
-    version: 1,
+    version: 2,
     exported: new Date().toISOString(),
     state: state,
-    overrides: loadOverrides()
+    overrides: loadOverrides(),
+    amountRules: loadAmountRules()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   var url = URL.createObjectURL(blob);
@@ -2623,6 +2817,7 @@ function restoreData(e) {
       state = data.state;
       saveState();
       if (data.overrides) saveOverrides(data.overrides);
+      if (data.amountRules) saveAmountRules(data.amountRules);
       document.getElementById('restore-file').value = '';
       showToast('Backup restored — ' + (state.transactions||[]).length + ' transactions loaded');
       renderPage(currentPage);
@@ -2749,7 +2944,7 @@ function parsePNC(text) {
     // Skip large non-payroll deposits (windfalls)
     if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS')) continue;
     var type = isNeg ? 'expense' : 'income';
-    var cat = resolveCategory(desc);
+    var cat = resolveCategory(desc, amt);
     results.push({ date, description: desc.replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type, skip: false });
   }
   return results;
@@ -2769,18 +2964,54 @@ function parseCC(text) {
     if (ccCat === 'undefined') continue;  // interest/fees — skip
     var amt = parseFloat(amtRaw.replace(/[^0-9.]/g, ''));
     if (isNaN(amt) || amt === 0) continue;
-    var cat = resolveCategory(desc);
+    var cat = resolveCategory(desc, amt);
     results.push({ date, description: desc.trim().replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type: 'expense', skip: false });
   }
   return results;
 }
 
-function resolveCategory(desc) {
-  // Check learned overrides first
+function resolveCategory(desc, amount) {
   var overrides = loadOverrides();
   var key = overrideKey(desc);
+  var amt = parseFloat(amount) || 0;
+
+  // Check amount-based rules first (most specific)
+  var amtRules = loadAmountRules();
+  if (amtRules[key]) {
+    var rules = amtRules[key]; // sorted array of {threshold, op, category}
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      var match = (r.op === 'gt' && amt > r.threshold) ||
+                  (r.op === 'lt' && amt < r.threshold) ||
+                  (r.op === 'gte' && amt >= r.threshold) ||
+                  (r.op === 'lte' && amt <= r.threshold);
+      if (match) return r.category;
+    }
+  }
+
+  // Fall back to flat vendor override
   if (overrides[key]) return overrides[key];
+
+  // Fall back to keyword auto-categorize
   return autoCategory(desc);
+}
+
+function loadAmountRules() {
+  try { return JSON.parse(localStorage.getItem('bowes_amt_rules') || '{}'); } catch(e) { return {}; }
+}
+
+function saveAmountRules(rules) {
+  localStorage.setItem('bowes_amt_rules', JSON.stringify(rules));
+}
+
+function addAmountRule(desc, threshold, op, category) {
+  var rules = loadAmountRules();
+  var key = overrideKey(desc);
+  if (!rules[key]) rules[key] = [];
+  // Remove any existing rule with same op+threshold
+  rules[key] = rules[key].filter(function(r){ return !(r.op === op && r.threshold === threshold); });
+  rules[key].push({ threshold: threshold, op: op, category: category });
+  saveAmountRules(rules);
 }
 
 function autoCategory(desc) {
@@ -2872,15 +3103,64 @@ function showPreview(rows) {
 
 function overrideCat(idx, newCat) {
   var row = pendingImport[idx];
-  var oldCat = row.category;
   row.category = newCat;
 
-  // Learn it — save override keyed to description prefix
-  var overrides = loadOverrides();
-  overrides[overrideKey(row.description)] = newCat;
-  saveOverrides(overrides);
+  var key = overrideKey(row.description);
+  var amt = parseFloat(row.amount) || 0;
 
-  // Update button count
+  // Check if there are already amount rules for this vendor
+  var amtRules = loadAmountRules();
+  var hasAmtRule = amtRules[key] && amtRules[key].length > 0;
+
+  // Show amount rule prompt if vendor appears in fuel/food ambiguous zone
+  var AMBIGUOUS = ['SHEETZ','KWIK FILL','COUNTRY FAIR','GETGO','GET GO','CITGO','SUNOCO',
+                   'AMAZON','WALMART','TARGET','SPEEDWAY','PILOT','EXXON','LOVES TRAVEL'];
+  var isAmbiguous = AMBIGUOUS.some(function(v){ return key.includes(v); });
+
+  if (isAmbiguous && !hasAmtRule) {
+    // Show inline prompt to create an amount rule
+    var promptEl = document.getElementById('amt-rule-prompt-' + idx);
+    if (!promptEl) {
+      var tr = document.getElementById('prow-' + idx);
+      if (tr) {
+        var promptRow = document.createElement('tr');
+        promptRow.id = 'amt-rule-prompt-' + idx;
+        promptRow.style.cssText = 'background:rgba(14,138,110,.06)';
+        promptRow.innerHTML = '<td colspan="5" style="padding:6px 10px;font-size:11px">' +
+          '<span style="color:var(--teal2);margin-right:8px">💡 Make this amount-based?</span>' +
+          '<span style="color:var(--muted)">' + row.description.slice(0,30) + ' &gt; $</span>' +
+          '<input id="amtrule-thresh-' + idx + '" type="number" value="25" style="width:50px;background:var(--card2);border:1px solid var(--border);color:var(--white);border-radius:4px;padding:2px 5px;font-size:11px;margin:0 4px"> ' +
+          '<span style="color:var(--muted)">→ Fuel &nbsp;&nbsp; below → ' + newCat + ' &nbsp;&nbsp;</span>' +
+          '<button onclick="applyAmtRule(' + idx + ','' + newCat + '')" style="background:var(--teal);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer">Apply rule</button>' +
+          '<button onclick="document.getElementById('amt-rule-prompt-' + idx + '').remove()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-left:6px">skip</button>' +
+        '</td>';
+        tr.parentNode.insertBefore(promptRow, tr.nextSibling);
+      }
+    }
+  } else {
+    // Just learn flat override
+    var overrides = loadOverrides();
+    overrides[key] = newCat;
+    saveOverrides(overrides);
+  }
+
+  updateImportCount();
+}
+
+function applyAmtRule(idx, belowCat) {
+  var row = pendingImport[idx];
+  var threshold = parseFloat(document.getElementById('amtrule-thresh-' + idx).value) || 25;
+  var key = overrideKey(row.description);
+
+  // Rule: amount >= threshold → Fuel, amount < threshold → belowCat
+  addAmountRule(row.description, threshold, 'gte', 'Fuel');
+  addAmountRule(row.description, threshold, 'lt',  belowCat);
+
+  // Remove prompt row
+  var pr = document.getElementById('amt-rule-prompt-' + idx);
+  if (pr) pr.remove();
+
+  showToast('Rule saved: ' + key.slice(0,15) + '... ≥$' + threshold + ' → Fuel, <$' + threshold + ' → ' + belowCat);
   updateImportCount();
 }
 
@@ -2968,6 +3248,343 @@ function updateAlertBadge() {
       }
     }
   });
+}
+
+// ─── RECURRING RULES ──────────────────────────────────────────────────────────
+
+// James's pre-seeded recurring rules — built from 14 months of transaction data
+var DEFAULT_RECURRING = [
+  // INCOME
+  { name:'MOM Brands Paycheck', billType:'income', amount:3124, variance:0, category:'Income',
+    schedule:'biweekly', biweeklyStart:'2026-01-02', biweeklyDow:5,
+    start:'2025-01-01', end:'', notes:'Biweekly Friday direct deposit', active:true },
+
+  // HOUSING
+  { name:'Mortgage', billType:'fixed', amount:395, variance:0, category:'Mortgage',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'PNC', active:true },
+  { name:'Car Payment', billType:'fixed', amount:725, variance:0, category:'Car Payment',
+    schedule:'monthly', day:15, start:'2025-01-01', end:'', notes:'Bridgecrest', active:true },
+  { name:'Camper Loan', billType:'fixed', amount:162, variance:0, category:'Camper Loan',
+    schedule:'biweekly', biweeklyStart:'2026-01-02', biweeklyDow:5,
+    start:'2025-01-01', end:'', notes:'BofA — biweekly ~$162/payment', active:true },
+  { name:'Home Insurance', billType:'fixed', amount:1100, variance:0, category:'Home Insurance',
+    schedule:'annual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Annual set-aside', active:true },
+  { name:'Property Taxes', billType:'fixed', amount:2176, variance:0, category:'Property Taxes',
+    schedule:'semiannual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Crawford County — biannual', active:true },
+  { name:'Camper Insurance', billType:'fixed', amount:114, variance:0, category:'Camper Insurance',
+    schedule:'semiannual', annualMonth:1, day:1, start:'2025-01-01', end:'', notes:'Progressive Advanced — biannual $114', active:true },
+
+  // UTILITIES
+  { name:'Electric', billType:'variable', amount:125, variance:40, category:'Electric',
+    schedule:'monthly', day:20, start:'2025-01-01', end:'', notes:'Northwestern Rural Electric — varies $85-165', active:true },
+  { name:'Internet / Cable', billType:'fixed', amount:78, variance:0, category:'Internet / Cable',
+    schedule:'monthly', day:23, start:'2025-01-01', end:'', notes:'Armstrong', active:true },
+  { name:'AT&T Phone', billType:'fixed', amount:260, variance:5, category:'Phone',
+    schedule:'monthly', day:23, start:'2025-01-01', end:'', notes:'AT&T — 2 lines + truck hotspot. Device installments end 2028.', active:true },
+
+  // TRANSPORT
+  { name:'Auto Insurance', billType:'fixed', amount:176, variance:0, category:'Auto Insurance',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Progressive — 6-mo premium averaged', active:true },
+
+  // KIDS
+  { name:'Daycare & Son', billType:'variable', amount:358, variance:50, category:'Daycare & Son',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Katelyn Venmo — daycare, food, supplies', active:true },
+  { name:'Daughters Activities', billType:'variable', amount:85, variance:25, category:'Daughters \u2014 Activities',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Jessica Venmo — shared activity costs', active:true },
+  { name:'Band Equipment', billType:'fixed', amount:29, variance:0, category:'Daughters \u2014 Band Equip.',
+    schedule:'monthly', day:5, start:'2025-01-01', end:'2027-06-01', notes:'Sweetwater installment — oldest daughter', active:true },
+  { name:'Greenlight Allowance', billType:'variable', amount:104, variance:20, category:'Greenlight Allowance',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'$24/wk max — chore-based', active:true },
+  { name:'School Lunch', billType:'variable', amount:32, variance:10, category:'School Lunch',
+    schedule:'monthly', day:1, start:'2025-09-01', end:'2026-06-15', notes:'SchoolCafe — school year only', active:true },
+  { name:'GameChanger', billType:'fixed', amount:9, variance:0, category:'GameChanger',
+    schedule:'annual', annualMonth:3, day:1, start:'2025-01-01', end:'', notes:'Annual $106 — baseball season app', active:true },
+
+  // OTHER
+  { name:'Healthcare / Contacts', billType:'variable', amount:30, variance:20, category:'Healthcare',
+    schedule:'monthly', day:15, start:'2025-01-01', end:'', notes:'1-800 Contacts every 6mo + misc CVS', active:true },
+  { name:'Income Tax Reserve', billType:'fixed', amount:55, variance:0, category:'Income Taxes',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Set aside for TurboTax + IRS', active:true },
+
+  // SAVINGS
+  { name:'Credit Union Savings', billType:'fixed', amount:300, variance:0, category:'Other',
+    schedule:'monthly', day:1, start:'2025-01-01', end:'', notes:'Auto transfer — emergency fund', active:true },
+  { name:'CC Payment', billType:'fixed', amount:530, variance:0, category:'Other',
+    schedule:'monthly', day:5, start:'2025-01-01', end:'2026-12-01', notes:'Payoff autopay — gone ~Month 10', active:true },
+];
+
+function initRecurring() {
+  if (!state.recurring) {
+    state.recurring = JSON.parse(JSON.stringify(DEFAULT_RECURRING));
+    saveState();
+  }
+}
+
+// ── SCHEDULE ENGINE — does this rule fire on dateStr? ────────────────────────
+function recurringFirsOnDate(rule, dateStr) {
+  if (!rule.active) return false;
+  if (rule.start && dateStr < rule.start) return false;
+  if (rule.end   && dateStr > rule.end)   return false;
+
+  var d = new Date(dateStr + 'T00:00:00');
+  var dom = d.getDate();      // day of month 1-31
+  var dow = d.getDay();       // day of week 0=Sun
+  var mon = d.getMonth() + 1; // 1-12
+  var msPerDay = 86400000;
+
+  switch (rule.schedule) {
+    case 'monthly':
+      return dom === (rule.day || 1);
+
+    case 'bimonthly':
+      return dom === (rule.bimDay1 || 1) || dom === (rule.bimDay2 || 15);
+
+    case 'biweekly':
+      if (!rule.biweeklyStart) return false;
+      var base = new Date(rule.biweeklyStart + 'T00:00:00');
+      var diff = Math.round((d - base) / msPerDay);
+      return diff >= 0 && diff % 14 === 0 && dow === parseInt(rule.biweeklyDow || 5);
+
+    case 'weekly':
+      return dow === parseInt(rule.weeklyDow || 5);
+
+    case 'semiannual':
+      return (mon === (rule.annualMonth || 1) || mon === ((rule.annualMonth || 1) + 6)) && dom === (rule.day || 1);
+
+    case 'annual':
+      return mon === (rule.annualMonth || 1) && dom === (rule.day || 1);
+
+    default:
+      return false;
+  }
+}
+
+// ── GET ALL ITEMS FOR A DATE ──────────────────────────────────────────────────
+function getRecurringForDate(dateStr) {
+  initRecurring();
+  var items = [];
+  state.recurring.forEach(function(rule) {
+    if (recurringFirsOnDate(rule, dateStr)) {
+      items.push({
+        desc: rule.name,
+        amount: rule.billType === 'income' ? rule.amount : -rule.amount,
+        variance: rule.variance || 0,
+        type: rule.billType === 'income' ? 'income' : 'bill',
+        category: rule.category,
+        confirmed: false,
+        fromRule: true
+      });
+    }
+  });
+  return items;
+}
+
+// ── GET ALL ITEMS FOR A MONTH ────────────────────────────────────────────────
+function getRecurringForMonth(year, month) {
+  initRecurring();
+  var daysInMonth = new Date(year, month + 1, 0).getDate();
+  var result = [];
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = year + '-' + String(month + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var items = getRecurringForDate(dateStr);
+    items.forEach(function(item) {
+      result.push(Object.assign({ day: d, date: dateStr }, item));
+    });
+  }
+  return result;
+}
+
+// ── SCHEDULE LABEL ───────────────────────────────────────────────────────────
+function scheduleLabel(rule) {
+  switch (rule.schedule) {
+    case 'monthly':    return 'Monthly day ' + (rule.day || 1);
+    case 'bimonthly':  return 'Twice/mo: ' + (rule.bimDay1||1) + ' & ' + (rule.bimDay2||15);
+    case 'biweekly':   return 'Every 2 ' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][rule.biweeklyDow||5] + 's';
+    case 'weekly':     return 'Weekly ' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][rule.weeklyDow||5];
+    case 'semiannual': return 'Every 6mo (month ' + (rule.annualMonth||1) + ')';
+    case 'annual':     return 'Annual (month ' + (rule.annualMonth||1) + ')';
+    default: return rule.schedule;
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function renderRecurring() {
+  initRecurring();
+  var active   = state.recurring.filter(function(r){ return r.active; });
+  var income   = state.recurring.filter(function(r){ return r.billType === 'income'; });
+  var fixed    = state.recurring.filter(function(r){ return r.billType === 'fixed'; });
+  var variable = state.recurring.filter(function(r){ return r.billType === 'variable'; });
+
+  // Monthly totals estimate
+  var monthlyOut = state.recurring.filter(function(r){ return r.billType !== 'income' && r.active; }).reduce(function(s,r){
+    var factor = r.schedule === 'annual' ? 1/12 : r.schedule === 'semiannual' ? 1/6 : r.schedule === 'biweekly' ? 2.17 : r.schedule === 'weekly' ? 4.33 : 1;
+    return s + r.amount * factor;
+  }, 0);
+  var monthlyIn = state.recurring.filter(function(r){ return r.billType === 'income' && r.active; }).reduce(function(s,r){
+    var factor = r.schedule === 'biweekly' ? 2.17 : r.schedule === 'weekly' ? 4.33 : 1;
+    return s + r.amount * factor;
+  }, 0);
+
+  var cards = document.getElementById('rec-cards');
+  if (cards) cards.innerHTML = [
+    { label:'Active rules',    val: active.length,         cls:'neutral' },
+    { label:'Est. monthly in', val: fmtInt(monthlyIn),    cls:'good' },
+    { label:'Est. monthly out',val: fmtInt(monthlyOut),   cls:'neutral' },
+    { label:'Est. net/mo',     val: fmtInt(monthlyIn - monthlyOut), cls: monthlyIn > monthlyOut ? 'good' : 'bad' },
+  ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div></div>'; }).join('');
+
+  function renderGroup(rules, tbodyId, showVariance) {
+    var el = document.getElementById(tbodyId);
+    if (!el) return;
+    if (rules.length === 0) {
+      el.innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center;padding:1.25rem">None yet</td></tr>';
+      return;
+    }
+    el.innerHTML = rules.map(function(r, i) {
+      var idx = state.recurring.indexOf(r);
+      var endLabel = r.end ? r.end : 'Ongoing';
+      var varLabel = r.variance > 0 ? '±' + fmtInt(r.variance) : '—';
+      var activeDot = r.active ? '<span style="color:var(--teal2)">●</span>' : '<span style="color:var(--muted)">○</span>';
+      return '<tr>' +
+        '<td>' + activeDot + ' ' + r.name + (r.notes ? '<div style="font-size:10px;color:var(--muted)">' + r.notes + '</div>' : '') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted)">' + scheduleLabel(r) + '</td>' +
+        '<td><span class="badge badge-muted" style="font-size:10px">' + (r.category||'—') + '</span></td>' +
+        '<td class="r" style="font-family:var(--mono)">' + fmtInt(r.amount) + '</td>' +
+        (showVariance ? '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + varLabel + '</td>' : '') +
+        '<td style="font-size:11px;color:var(--muted)">' + endLabel + '</td>' +
+        '<td><button class="btn btn-ghost btn-sm" onclick="openEditRecurring(' + idx + ')">Edit</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  renderGroup(income,   'rec-income',   false);
+  renderGroup(fixed,    'rec-fixed',    true);
+  renderGroup(variable, 'rec-variable', true);
+}
+
+// ── MODAL ────────────────────────────────────────────────────────────────────
+function recScheduleChanged() {
+  var s = document.getElementById('rec-schedule').value;
+  document.getElementById('rec-monthly-opts').style.display   = (s==='monthly'||s==='annual'||s==='semiannual') ? 'block' : 'none';
+  document.getElementById('rec-biweekly-opts').style.display  = s==='biweekly'  ? 'block' : 'none';
+  document.getElementById('rec-weekly-opts').style.display    = s==='weekly'    ? 'block' : 'none';
+  document.getElementById('rec-bimonthly-opts').style.display = s==='bimonthly' ? 'block' : 'none';
+  document.getElementById('rec-annual-opts').style.display    = (s==='annual'||s==='semiannual') ? 'block' : 'none';
+}
+
+function populateRecCategorySelect(selected) {
+  var sel = document.getElementById('rec-category');
+  if (!sel) return;
+  sel.innerHTML = allCategories().map(function(c){
+    return '<option value="' + c + '"' + (c===selected?' selected':'') + '>' + c + '</option>';
+  }).join('');
+}
+
+function openAddRecurring(billType) {
+  initRecurring();
+  document.getElementById('modal-recurring-title').textContent = 'Add Recurring Rule';
+  document.getElementById('edit-rec-idx').value = -1;
+  document.getElementById('rec-delete-btn').style.display = 'none';
+  document.getElementById('rec-name').value = '';
+  document.getElementById('rec-bill-type').value = billType || 'fixed';
+  document.getElementById('rec-amount').value = '';
+  document.getElementById('rec-variance').value = '';
+  document.getElementById('rec-schedule').value = 'monthly';
+  document.getElementById('rec-day').value = '1';
+  document.getElementById('rec-biweekly-start').value = today();
+  document.getElementById('rec-biweekly-dow').value = '5';
+  document.getElementById('rec-weekly-dow').value = '5';
+  document.getElementById('rec-bim-day1').value = '1';
+  document.getElementById('rec-bim-day2').value = '15';
+  document.getElementById('rec-annual-month').value = '1';
+  document.getElementById('rec-start').value = today();
+  document.getElementById('rec-end').value = '';
+  document.getElementById('rec-notes').value = '';
+  document.getElementById('rec-active').checked = true;
+  populateRecCategorySelect('');
+  recScheduleChanged();
+  document.getElementById('modal-recurring').classList.add('open');
+}
+
+function openEditRecurring(idx) {
+  var r = state.recurring[idx];
+  document.getElementById('modal-recurring-title').textContent = 'Edit Recurring Rule';
+  document.getElementById('edit-rec-idx').value = idx;
+  document.getElementById('rec-delete-btn').style.display = 'inline-block';
+  document.getElementById('rec-name').value = r.name || '';
+  document.getElementById('rec-bill-type').value = r.billType || 'fixed';
+  document.getElementById('rec-amount').value = r.amount || '';
+  document.getElementById('rec-variance').value = r.variance || '';
+  document.getElementById('rec-schedule').value = r.schedule || 'monthly';
+  document.getElementById('rec-day').value = r.day || 1;
+  document.getElementById('rec-biweekly-start').value = r.biweeklyStart || today();
+  document.getElementById('rec-biweekly-dow').value = r.biweeklyDow !== undefined ? r.biweeklyDow : 5;
+  document.getElementById('rec-weekly-dow').value = r.weeklyDow !== undefined ? r.weeklyDow : 5;
+  document.getElementById('rec-bim-day1').value = r.bimDay1 || 1;
+  document.getElementById('rec-bim-day2').value = r.bimDay2 || 15;
+  document.getElementById('rec-annual-month').value = r.annualMonth || 1;
+  document.getElementById('rec-start').value = r.start || '';
+  document.getElementById('rec-end').value = r.end || '';
+  document.getElementById('rec-notes').value = r.notes || '';
+  document.getElementById('rec-active').checked = r.active !== false;
+  populateRecCategorySelect(r.category);
+  recScheduleChanged();
+  document.getElementById('modal-recurring').classList.add('open');
+}
+
+function saveRecurring() {
+  initRecurring();
+  var idx      = parseInt(document.getElementById('edit-rec-idx').value);
+  var name     = document.getElementById('rec-name').value.trim();
+  var billType = document.getElementById('rec-bill-type').value;
+  var amount   = parseFloat(document.getElementById('rec-amount').value) || 0;
+  var variance = parseFloat(document.getElementById('rec-variance').value) || 0;
+  var category = document.getElementById('rec-category').value;
+  var schedule = document.getElementById('rec-schedule').value;
+  var start    = document.getElementById('rec-start').value;
+  var end      = document.getElementById('rec-end').value;
+  var notes    = document.getElementById('rec-notes').value.trim();
+  var active   = document.getElementById('rec-active').checked;
+
+  if (!name || !amount) { showToast('Name and amount required'); return; }
+
+  var rule = { name, billType, amount, variance, category, schedule, start, end, notes, active };
+
+  // Schedule-specific fields
+  if (schedule === 'monthly' || schedule === 'semiannual' || schedule === 'annual') {
+    rule.day = parseInt(document.getElementById('rec-day').value) || 1;
+  }
+  if (schedule === 'biweekly') {
+    rule.biweeklyStart = document.getElementById('rec-biweekly-start').value;
+    rule.biweeklyDow   = parseInt(document.getElementById('rec-biweekly-dow').value);
+  }
+  if (schedule === 'weekly') {
+    rule.weeklyDow = parseInt(document.getElementById('rec-weekly-dow').value);
+  }
+  if (schedule === 'bimonthly') {
+    rule.bimDay1 = parseInt(document.getElementById('rec-bim-day1').value) || 1;
+    rule.bimDay2 = parseInt(document.getElementById('rec-bim-day2').value) || 15;
+  }
+  if (schedule === 'semiannual' || schedule === 'annual') {
+    rule.annualMonth = parseInt(document.getElementById('rec-annual-month').value) || 1;
+  }
+
+  if (idx === -1) state.recurring.push(rule);
+  else state.recurring[idx] = rule;
+
+  saveState();
+  closeModal('modal-recurring');
+  showToast(idx === -1 ? 'Rule added' : 'Rule updated');
+  renderRecurring();
+}
+
+function deleteRecurring() {
+  var idx = parseInt(document.getElementById('edit-rec-idx').value);
+  state.recurring.splice(idx, 1);
+  saveState();
+  closeModal('modal-recurring');
+  showToast('Rule deleted');
+  renderRecurring();
 }
 
 // ─── NET WORTH ────────────────────────────────────────────────────────────────
@@ -3338,7 +3955,7 @@ function renderCalendar() {
   var y = calMonth.year, m = calMonth.month;
   document.getElementById('cal-month-label').textContent = monthStr(y, m);
 
-  var bills = getMonthBills(y, m);
+  var bills = getRecurringForMonth(y, m);
   var totalOut = bills.filter(function(b){ return b.group !== 'income'; }).reduce(function(s,b){ return s+b.amount; }, 0);
   var totalIn  = bills.filter(function(b){ return b.group === 'income'; }).reduce(function(s,b){ return s+b.amount; }, 0);
   var biggestDay = bills.reduce(function(m,b){ return b.amount > m.amount && b.group !== 'income' ? b : m; }, {amount:0});
@@ -3448,10 +4065,9 @@ function renderAlerts() {
   // 2. Upcoming bills in next 7 days
   for (var i = 1; i <= 7; i++) {
     var dStr = dateOffset(i);
-    var d = new Date(dStr + 'T00:00:00');
-    var bills = getMonthBills(d.getFullYear(), d.getMonth()).filter(function(b){ return b.day === d.getDate() && b.group !== 'income'; });
+    var bills = getRecurringForDate(dStr).filter(function(b){ return b.type !== 'income'; });
     bills.forEach(function(b) {
-      upcoming.push({ icon:'📅', title: b.name + ' due ' + dateFmt(dStr), body: fmtInt(b.amount) + ' — ' + i + ' day' + (i>1?'s':'') + ' away', cls:'info' });
+      upcoming.push({ icon:'📅', title: b.desc + ' due ' + dateFmt(dStr), body: fmtInt(Math.abs(b.amount)) + ' — ' + i + ' day' + (i>1?'s':'') + ' away', cls:'info' });
     });
   }
 
@@ -3694,10 +4310,10 @@ function buildDayEvents(days, todayStr) {
     });
   });
 
-  // Scheduled future bills
+  // Scheduled future bills from recurring rules
   days.forEach(function(d) {
     if (d <= todayStr) return;
-    getScheduledBills(d).forEach(function(b) { dayEvents[d].push(b); });
+    getRecurringForDate(d).forEach(function(b) { dayEvents[d].push(b); });
   });
 
   // One-off items
@@ -4636,6 +5252,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div style="font-size:13px;font-weight:600;margin-bottom:.75rem;color:var(--muted)">More</div>
     <div style="display:flex;flex-direction:column;gap:4px">
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('daybyday')"><span class="nav-icon">⬦</span> Day by Day</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('recurring')"><span class="nav-icon">↺</span> Recurring</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('calendar')"><span class="nav-icon">▦</span> Bill Calendar</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('alerts')"><span class="nav-icon">◐</span> Alerts</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('reports')"><span class="nav-icon">▲</span> Reports</div>
