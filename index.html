@@ -214,7 +214,20 @@ tbody tr.subhdr td{
 }
 .form-input:focus{border-color:var(--teal)}
 .form-input::placeholder{color:var(--muted)}
-select.form-input option{background:var(--navy2);color:var(--white)}
+/* Global select/option styling — covers all selects including inline-styled ones */
+select option, select.form-input option {
+  background:var(--navy2);color:var(--white);
+}
+select { color:var(--white); }
+/* Fix any select that inherits wrong colors */
+select:not(.form-input) {
+  background:var(--card2);color:var(--white);border:1px solid var(--border);
+  border-radius:6px;font-family:var(--sans);
+}
+/* Ensure table text is always readable */
+table td, table th { color:var(--white); }
+table th { color:var(--muted)!important; }
+tbody td.muted { color:var(--muted)!important; }
 
 /* MODAL */
 .modal-overlay{
@@ -3586,9 +3599,9 @@ function showPreview(rows) {
   tbody.innerHTML = rows.map((r, i) =>
     '<tr id="prow-' + i + '" style="' + (r.isDupe ? 'opacity:.4' : '') + ';border-bottom:1px solid var(--border)">' +
     '<td style="padding:6px 10px;white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + r.date + '</td>' +
-    '<td style="padding:6px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="' + r.description + '">' + r.description + '</td>' +
+    '<td style="padding:6px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--white)" title="' + r.description + '">' + r.description + '</td>' +
     '<td style="padding:6px 10px">' +
-      '<select style="background:var(--card2);border:1px solid var(--border);color:var(--white);border-radius:6px;padding:3px 6px;font-size:11px;font-family:var(--sans);cursor:pointer;outline:none" onchange="overrideCat(' + i + ',this.value)">' +
+      '<select class="form-input" style="padding:3px 6px;font-size:11px;width:auto;cursor:pointer" onchange="overrideCat(' + i + ',this.value)">' +
       catOptions(r.category) +
       '</select>' +
     '</td>' +
