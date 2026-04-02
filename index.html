@@ -39,14 +39,6 @@
 html{scroll-behavior:smooth}
 
 
-body {
-  font-family: var(--sans);
-  background: var(--navy);
-  color: var(--white);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
 html, body { height:100%; margin:0; overflow:hidden; }
 .app { display:flex; height:100%; }
@@ -361,9 +353,9 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .group-hdr:hover .group-hdr-label{color:var(--white)}
 .group-hdr-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:8px}
 .group-hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono);color:var(--muted)}
-..group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
+.group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
 .group-chevron.open{transform:rotate(90deg)}
-./* MONTH NAV on dashboard */
+.group-/* MONTH NAV on dashboard */
 .dash-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
 .dash-month-btn{background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:14px;font-family:var(--sans);transition:all .15s}
 .dash-month-btn:hover{color:var(--white);border-color:var(--teal)}
@@ -435,7 +427,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .alert-item.success  { border-left:3px solid var(--teal) }
 .alert-icon { font-size:18px;flex-shrink:0;margin-top:1px }
 .alert-title { font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px }
-.alert-/* removed bad body rule */
+.alert-body { font-size:12px;color:var(--muted) }
 
 
 /* ─── SIDEBAR SCROLL + COLLAPSIBLE ──────────────────────────────── */
@@ -457,7 +449,12 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .nav-section-hdr:hover { color:var(--white); }
 .nav-sec-chevron { font-size:10px;transition:transform .2s; }
 .nav-sec-chevron.collapsed { transform:rotate(-90deg); }
-.nav-section-.nav-section-body.collapsed { max-height:0!important; }
+.nav-section-body {
+  max-height: 500px;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.nav-section-body.collapsed { max-height:0!important; overflow:hidden; }
 
 
 .cal-more-btn { font-size:9px;color:var(--teal2);cursor:pointer;padding:1px 0;user-select:none }
@@ -756,7 +753,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="section">
         <div class="section-hdr"><div class="section-title">CC Payoff tracker</div></div>
         <div class="cards-grid-3">
-          <div class="stat-note">~24% APR</div></div>
+          <div class="stat-card bad"><div class="stat-label">CC Balance</div><div class="stat-val" id="cc-balance">—</div><div class="stat-note">~24% APR</div></div>
           <div class="stat-card neutral"><div class="stat-label">Monthly Payment</div><div class="stat-val">$530</div><div class="stat-note">Auto-pay target</div></div>
           <div class="stat-card good"><div class="stat-label">Payoff Month</div><div class="stat-val" id="cc-payoff-month">—</div><div class="stat-note">At current rate</div></div>
         </div>
@@ -1669,7 +1666,6 @@ var DEFAULT_STATE = {
   ccOriginal: 0,
   transactions: [],
   dayItems: [],
-  dayItems: [],
   needs: [
     {name:"Mortgage / Rent", amt:0, notes:"Fixed monthly", group:"Housing"},
     {name:"Car Payment", amt:0, notes:"Fixed monthly", group:"Housing"},
@@ -1745,15 +1741,14 @@ function nav(page) {
   });
   currentPage = page;
   renderPage(page);
-  // Force scroll to top - use both immediate and rAF to handle all browsers
+  // Scroll main back to top AFTER rendering - use timeout to ensure DOM is settled
   var mainEl = document.querySelector('main');
   if (mainEl) mainEl.scrollTop = 0;
-  requestAnimationFrame(function() {
+  window.scrollTo(0, 0);
+  setTimeout(function() {
     if (mainEl) mainEl.scrollTop = 0;
-    // Also scroll the active page into view from top
-    var activeEl = document.getElementById('page-' + page);
-    if (activeEl) activeEl.scrollIntoView({ block: 'start', behavior: 'instant' });
-  });
+    window.scrollTo(0, 0);
+  }, 50);
 }
 
 function renderPage(page) {
@@ -1984,14 +1979,10 @@ function toggleGroup(groupId) {
   var collapsed = getCollapsed();
   collapsed[groupId] = !collapsed[groupId];
   setCollapsed(collapsed);
-  // Re-render the right section based on groupId prefix
-  if (groupId.startsWith('needs-')) {
-    renderNeeds();
-  } else {
-    var y = plMonth.year, m = plMonth.month;
-    var prog = document.getElementById('dash-progress');
-    if (prog) prog.innerHTML = renderGroupedProgress(y, m);
-  }
+  // Re-render just the progress section
+  var y = plMonth.year, m = plMonth.month;
+  var prog = document.getElementById('dash-progress');
+  if (prog) prog.innerHTML = renderGroupedProgress(y, m);
 }
 
 function renderGroupedProgress(y, m) {
@@ -3012,12 +3003,6 @@ saveState = function() {
   if (DB.token) DB.scheduleSave();
 };
 
-// Also save overrides to Dropbox when they change
-var _origSaveOverrides = saveOverrides;
-saveOverrides = function(o) {
-  _origSaveOverrides(o);
-  if (DB.token) DB.scheduleSave();
-};
 
 // ─── ONEDRIVE SYNC ───────────────────────────────────────────────────────────
 
@@ -3156,6 +3141,13 @@ function loadOverrides() {
   catch(e) { return {}; }
 }
 function saveOverrides(o) { localStorage.setItem('bowes_cat_overrides', JSON.stringify(o)); }
+
+// Dropbox sync hook for overrides
+var _origSaveOverrides = saveOverrides;
+saveOverrides = function(o) {
+  _origSaveOverrides(o);
+  if (DB.token) DB.scheduleSave();
+};
 
 // Lookup key: first 30 chars of description uppercased
 function overrideKey(desc) { return desc.toUpperCase().slice(0,30).trim(); }
@@ -5595,29 +5587,6 @@ function applyNavCollapsed() {
       if (chev) chev.style.transform = 'rotate(0deg)';
     }
   });
-}
-
-
-function calFindRecurringIdx(billName) {
-  if (!state.recurring) return -1;
-  for (var i = 0; i < state.recurring.length; i++) {
-    if (state.recurring[i].name === billName) return i;
-  }
-  return -1;
-}
-
-function calEditRule(idx) {
-  nav('recurring');
-  setTimeout(function() { openEditRecurring(idx); }, 200);
-}
-
-function calExpandDay(overId) {
-  var el = document.getElementById(overId);
-  var btn = el ? el.previousElementSibling : null;
-  if (!el) return;
-  var isOpen = el.style.display !== 'none';
-  el.style.display = isOpen ? 'none' : 'block';
-  if (btn) btn.innerHTML = isOpen ? '+' + el.children.length + ' more &#9662;' : '&#9652; less';
 }
 
 
