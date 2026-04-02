@@ -1182,9 +1182,19 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <label class="form-label">Name</label>
       <input class="form-input" id="edit-budget-name">
     </div>
-    <div class="form-group" style="margin-bottom:.75rem">
-      <label class="form-label">Monthly Budget ($)</label>
-      <input class="form-input" id="edit-budget-amt" type="number" step="1">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Monthly Budget ($)</label>
+        <input class="form-input" id="edit-budget-amt" type="number" step="1">
+      </div>
+      <div class="form-group" id="edit-budget-group-wrap">
+        <label class="form-label">Group</label>
+        <select class="form-input" id="edit-budget-group" onchange="budgetGroupChanged()"></select>
+      </div>
+    </div>
+    <div class="form-group" id="edit-budget-newgroup-wrap" style="display:none;margin-bottom:.75rem">
+      <label class="form-label">New Group Name</label>
+      <input class="form-input" id="edit-budget-newgroup" placeholder="e.g. Pets, Education, Side Hustle...">
     </div>
     <div class="form-group" style="margin-bottom:.75rem">
       <label class="form-label">Notes</label>
@@ -2031,16 +2041,27 @@ function toggleGroup(groupId) {
 function renderGroupedProgress(y, m) {
   var collapsed = getCollapsed();
 
-  // Build groups from needs + wants
-  var groups = [
-    { id: 'housing',   label: 'Housing & Debt',  items: state.needs.filter(function(n){ return n.group === 'Housing'; }) },
-    { id: 'utilities', label: 'Utilities',        items: state.needs.filter(function(n){ return n.group === 'Utilities'; }) },
-    { id: 'transport', label: 'Transport',        items: state.needs.filter(function(n){ return n.group === 'Transport'; }) },
-    { id: 'food',      label: 'Food & Home',      items: state.needs.filter(function(n){ return n.group === 'Food & Home'; }) },
-    { id: 'kids',      label: 'Kids',             items: state.needs.filter(function(n){ return n.group === 'Kids'; }) },
-    { id: 'other',     label: 'Other Needs',      items: state.needs.filter(function(n){ return n.group === 'Other'; }) },
-    { id: 'wants',     label: 'Wants',            items: state.wants },
-  ].filter(function(g){ return g.items.length > 0; });
+  // Build groups dynamically from data — no hardcoded group names
+  var needGroups = {};
+  var needGroupOrder = [];
+  state.needs.forEach(function(n) {
+    var g = n.group || 'Other';
+    if (!needGroups[g]) { needGroups[g] = []; needGroupOrder.push(g); }
+    needGroups[g].push(n);
+  });
+  // Dedupe order
+  needGroupOrder = needGroupOrder.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+  var groups = needGroupOrder.map(function(g) {
+    return {
+      id: g.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      label: g,
+      items: needGroups[g]
+    };
+  });
+  // Always add Wants at the end
+  groups.push({ id: 'wants', label: 'Wants', items: state.wants });
+  groups = groups.filter(function(g){ return g.items.length > 0; });
 
   var html = '';
 
@@ -2713,6 +2734,47 @@ function deleteTx() {
   renderPage(currentPage);
 }
 
+// Get all existing need groups from the data — never hardcoded
+function allNeedGroups() {
+  var groups = [];
+  (state.needs || []).forEach(function(n) {
+    if (n.group && groups.indexOf(n.group) === -1) groups.push(n.group);
+  });
+  return groups.sort(function(a, b) { return a.localeCompare(b); });
+}
+
+function populateGroupSelect(selected) {
+  var sel = document.getElementById('edit-budget-group');
+  var type = document.getElementById('edit-budget-type').value;
+  if (!sel) return;
+
+  // Wants don't use groups — hide the field
+  var wrap = document.getElementById('edit-budget-group-wrap');
+  if (type === 'want') {
+    if (wrap) wrap.style.display = 'none';
+    return;
+  }
+  if (wrap) wrap.style.display = 'block';
+
+  var groups = allNeedGroups();
+  // If selected isn't in the list (e.g. brand new), add it
+  if (selected && groups.indexOf(selected) === -1) groups.push(selected);
+
+  sel.innerHTML = groups.map(function(g) {
+    return '<option value="' + g + '"' + (g === selected ? ' selected' : '') + '>' + g + '</option>';
+  }).join('') + '<option value="__new__">+ New group...</option>';
+
+  document.getElementById('edit-budget-newgroup-wrap').style.display = 'none';
+  document.getElementById('edit-budget-newgroup').value = '';
+}
+
+function budgetGroupChanged() {
+  var sel = document.getElementById('edit-budget-group');
+  var isNew = sel.value === '__new__';
+  document.getElementById('edit-budget-newgroup-wrap').style.display = isNew ? 'block' : 'none';
+  if (isNew) document.getElementById('edit-budget-newgroup').focus();
+}
+
 function openEditBudget(type, idx) {
   var item = type === 'need' ? state.needs[idx] : state.wants[idx];
   document.getElementById('modal-budget-title').textContent = 'Edit ' + (type==='need'?'Need':'Want');
@@ -2721,6 +2783,7 @@ function openEditBudget(type, idx) {
   document.getElementById('edit-budget-name').value = item.name;
   document.getElementById('edit-budget-amt').value = item.amt;
   document.getElementById('edit-budget-notes').value = item.notes || '';
+  populateGroupSelect(item.group || 'Other');
   document.getElementById('modal-budget-item').classList.add('open');
 }
 
@@ -2731,6 +2794,7 @@ function openAddNeed() {
   document.getElementById('edit-budget-name').value = '';
   document.getElementById('edit-budget-amt').value = '';
   document.getElementById('edit-budget-notes').value = '';
+  populateGroupSelect('Other');
   document.getElementById('modal-budget-item').classList.add('open');
 }
 
@@ -2741,6 +2805,7 @@ function openAddWant() {
   document.getElementById('edit-budget-name').value = '';
   document.getElementById('edit-budget-amt').value = '';
   document.getElementById('edit-budget-notes').value = '';
+  populateGroupSelect('');
   document.getElementById('modal-budget-item').classList.add('open');
 }
 
@@ -2753,11 +2818,23 @@ function saveBudgetItem() {
 
   if (!name || isNaN(amt)) { showToast('Fill in all fields'); return; }
 
+  // Resolve group for needs
+  var group = 'Other';
+  if (type === 'need') {
+    var groupSel = document.getElementById('edit-budget-group').value;
+    if (groupSel === '__new__') {
+      group = document.getElementById('edit-budget-newgroup').value.trim();
+      if (!group) { showToast('Enter a group name'); return; }
+    } else {
+      group = groupSel;
+    }
+  }
+
   var arr = type === 'need' ? state.needs : state.wants;
   if (idx === -1) {
-    arr.push({name, amt, notes, group: 'Other'});
+    arr.push({name: name, amt: amt, notes: notes, group: group});
   } else {
-    arr[idx] = {...arr[idx], name, amt, notes};
+    arr[idx] = Object.assign({}, arr[idx], {name: name, amt: amt, notes: notes, group: group});
   }
   saveState();
   closeModal('modal-budget-item');
