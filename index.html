@@ -361,9 +361,9 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .group-hdr:hover .group-hdr-label{color:var(--white)}
 .group-hdr-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:8px}
 .group-hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono);color:var(--muted)}
-.group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
+..group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
 .group-chevron.open{transform:rotate(90deg)}
-.group-/* MONTH NAV on dashboard */
+./* MONTH NAV on dashboard */
 .dash-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
 .dash-month-btn{background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:14px;font-family:var(--sans);transition:all .15s}
 .dash-month-btn:hover{color:var(--white);border-color:var(--teal)}
@@ -1984,10 +1984,14 @@ function toggleGroup(groupId) {
   var collapsed = getCollapsed();
   collapsed[groupId] = !collapsed[groupId];
   setCollapsed(collapsed);
-  // Re-render just the progress section
-  var y = plMonth.year, m = plMonth.month;
-  var prog = document.getElementById('dash-progress');
-  if (prog) prog.innerHTML = renderGroupedProgress(y, m);
+  // Re-render the right section based on groupId prefix
+  if (groupId.startsWith('needs-')) {
+    renderNeeds();
+  } else {
+    var y = plMonth.year, m = plMonth.month;
+    var prog = document.getElementById('dash-progress');
+    if (prog) prog.innerHTML = renderGroupedProgress(y, m);
+  }
 }
 
 function renderGroupedProgress(y, m) {
