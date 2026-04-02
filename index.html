@@ -1248,14 +1248,26 @@ tbody td.muted { color:var(--muted)!important; }
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Monthly Budget ($)</label>
-        <input class="form-input" id="edit-budget-amt" type="number" step="1">
+        <label class="form-label" id="edit-budget-amt-label">Amount ($)</label>
+        <input class="form-input" id="edit-budget-amt" type="number" step="1" oninput="budgetAmtChanged()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Frequency</label>
+        <select class="form-input" id="edit-budget-freq" onchange="budgetAmtChanged()">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Every 2 weeks</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="semiannual">Every 6 months</option>
+          <option value="annual">Annual</option>
+        </select>
       </div>
       <div class="form-group" id="edit-budget-group-wrap">
         <label class="form-label">Group</label>
         <select class="form-input" id="edit-budget-group" onchange="budgetGroupChanged()"></select>
       </div>
     </div>
+    <div id="edit-budget-monthly-note" style="font-size:11px;color:var(--teal2);margin-bottom:.75rem;display:none"></div>
     <div class="form-group" id="edit-budget-newgroup-wrap" style="display:none;margin-bottom:.75rem">
       <label class="form-label">New Group Name</label>
       <input class="form-input" id="edit-budget-newgroup" placeholder="e.g. Pets, Education, Side Hustle...">
@@ -2598,9 +2610,13 @@ function renderNeeds() {
     html += '<td class="muted" style="font-size:11px">' + groups[g].length + ' items</td><td></td></tr>';
     if (isOpen) {
       groups[g].forEach(function(n) {
+        var freqNote = '';
+        if (n.freq && n.freq !== 'monthly') {
+          freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(n.rawAmt || n.amt) + ' ' + freqLabel(n.freq || 'monthly') + '</div>';
+        }
         html += '<tr>';
         html += '<td style="padding-left:1.5rem">' + n.name + '</td>';
-        html += '<td class="r">' + fmtInt(n.amt) + '</td>';
+        html += '<td class="r">' + fmtInt(n.amt) + '/mo' + freqNote + '</td>';
         html += '<td class="muted">' + (n.notes||'') + '</td>';
         html += '<td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'need\',' + n.idx + ')">Edit</button></td>';
         html += '</tr>';
@@ -2613,7 +2629,13 @@ function renderNeeds() {
 
 function renderWants() {
   var total = state.wants.reduce((s,w) => s+w.amt, 0);
-  var rows = state.wants.map((w,i) => '<tr><td>' + w.name + '</td><td class="r">' + fmtInt(w.amt) + '</td><td class="muted">' + (w.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'want\','+i+')">Edit</button></td></tr>').join('');
+  var rows = state.wants.map(function(w,i) {
+    var freqNote = '';
+    if (w.freq && w.freq !== 'monthly') {
+      freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(w.rawAmt || w.amt) + ' ' + freqLabel(w.freq || 'monthly') + '</div>';
+    }
+    return '<tr><td>' + w.name + '</td><td class="r">' + fmtInt(w.amt) + '/mo' + freqNote + '</td><td class="muted">' + (w.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'want\','+i+')">Edit</button></td></tr>';
+  }).join('');
   rows += '<tr class="total-row"><td>Total Wants</td><td class="r">' + fmtInt(total) + '</td><td colspan="2"></td></tr>';
   document.getElementById('wants-tbl').innerHTML = rows;
 }
@@ -2858,15 +2880,40 @@ function budgetGroupChanged() {
   if (isNew) document.getElementById('edit-budget-newgroup').focus();
 }
 
+// Frequency → monthly multiplier
+function freqToMonthly(freq) {
+  return { monthly:1, weekly:4.33, biweekly:2.17, quarterly:1/3, semiannual:1/6, annual:1/12 }[freq] || 1;
+}
+
+function freqLabel(freq) {
+  return { monthly:'Monthly', weekly:'Weekly', biweekly:'Every 2 wks', quarterly:'Quarterly', semiannual:'Every 6 mo', annual:'Annual' }[freq] || 'Monthly';
+}
+
+function budgetAmtChanged() {
+  var amt = parseFloat(document.getElementById('edit-budget-amt').value) || 0;
+  var freq = document.getElementById('edit-budget-freq').value;
+  var note = document.getElementById('edit-budget-monthly-note');
+  if (freq !== 'monthly' && amt > 0) {
+    var monthly = amt * freqToMonthly(freq);
+    note.textContent = '= ' + fmtInt(monthly) + '/mo budgeted';
+    note.style.display = 'block';
+  } else {
+    note.style.display = 'none';
+  }
+}
+
 function openEditBudget(type, idx) {
   var item = type === 'need' ? state.needs[idx] : state.wants[idx];
   document.getElementById('modal-budget-title').textContent = 'Edit ' + (type==='need'?'Need':'Want');
   document.getElementById('edit-budget-type').value = type;
   document.getElementById('edit-budget-idx').value = idx;
   document.getElementById('edit-budget-name').value = item.name;
-  document.getElementById('edit-budget-amt').value = item.amt;
+  // Show raw amount if we have it, otherwise show monthly amt
+  document.getElementById('edit-budget-amt').value = item.rawAmt || item.amt;
+  document.getElementById('edit-budget-freq').value = item.freq || 'monthly';
   document.getElementById('edit-budget-notes').value = item.notes || '';
   populateGroupSelect(item.group || 'Other');
+  budgetAmtChanged();
   document.getElementById('modal-budget-item').classList.add('open');
 }
 
@@ -2876,7 +2923,9 @@ function openAddNeed() {
   document.getElementById('edit-budget-idx').value = -1;
   document.getElementById('edit-budget-name').value = '';
   document.getElementById('edit-budget-amt').value = '';
+  document.getElementById('edit-budget-freq').value = 'monthly';
   document.getElementById('edit-budget-notes').value = '';
+  document.getElementById('edit-budget-monthly-note').style.display = 'none';
   populateGroupSelect('Other');
   document.getElementById('modal-budget-item').classList.add('open');
 }
@@ -2887,7 +2936,9 @@ function openAddWant() {
   document.getElementById('edit-budget-idx').value = -1;
   document.getElementById('edit-budget-name').value = '';
   document.getElementById('edit-budget-amt').value = '';
+  document.getElementById('edit-budget-freq').value = 'monthly';
   document.getElementById('edit-budget-notes').value = '';
+  document.getElementById('edit-budget-monthly-note').style.display = 'none';
   populateGroupSelect('');
   document.getElementById('modal-budget-item').classList.add('open');
 }
@@ -2896,10 +2947,14 @@ function saveBudgetItem() {
   var type = document.getElementById('edit-budget-type').value;
   var idx  = parseInt(document.getElementById('edit-budget-idx').value);
   var name = document.getElementById('edit-budget-name').value.trim();
-  var amt  = parseFloat(document.getElementById('edit-budget-amt').value);
+  var rawAmt = parseFloat(document.getElementById('edit-budget-amt').value);
+  var freq = document.getElementById('edit-budget-freq').value;
   var notes= document.getElementById('edit-budget-notes').value.trim();
 
-  if (!name || isNaN(amt)) { showToast('Fill in all fields'); return; }
+  if (!name || isNaN(rawAmt)) { showToast('Fill in all fields'); return; }
+
+  // Compute monthly equivalent for all budget math
+  var monthlyAmt = Math.round(rawAmt * freqToMonthly(freq));
 
   // Resolve group for needs
   var group = 'Other';
@@ -2915,9 +2970,9 @@ function saveBudgetItem() {
 
   var arr = type === 'need' ? state.needs : state.wants;
   if (idx === -1) {
-    arr.push({name: name, amt: amt, notes: notes, group: group});
+    arr.push({name: name, amt: monthlyAmt, rawAmt: rawAmt, freq: freq, notes: notes, group: group});
   } else {
-    arr[idx] = Object.assign({}, arr[idx], {name: name, amt: amt, notes: notes, group: group});
+    arr[idx] = Object.assign({}, arr[idx], {name: name, amt: monthlyAmt, rawAmt: rawAmt, freq: freq, notes: notes, group: group});
   }
   saveState();
   closeModal('modal-budget-item');
@@ -5776,7 +5831,8 @@ function renderDebts() {
         var pct = d.original > 0 ? Math.min(Math.round((1 - d.balance/d.original)*100), 100) : 0;
         var months = monthsToPayoff(d.balance||0, d.rate||0, d.payment||0);
         var interest = totalInterest(d.balance||0, d.rate||0, d.payment||0);
-        var color = debtTypeColor(d.type);
+        // Progress bar: green = paid off portion (good), track = remaining
+        var barColor = pct > 75 ? '#0BB589' : pct > 40 ? '#0BB589' : '#378ADD';
         return "<div class='tbl-wrap' style='padding:1rem 1.25rem;margin-bottom:8px'>" +
           "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px'>" +
             "<div>" +
@@ -5801,7 +5857,7 @@ function renderDebts() {
               "<span style='font-family:var(--mono)'>" + fmtInt(d.balance||0) + " remaining</span>" +
             "</div>" +
             "<div style='height:6px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden'>" +
-              "<div style='height:100%;width:" + pct + "%;background:" + color + ";border-radius:999px;transition:width .4s'></div>" +
+              "<div style='height:100%;width:" + pct + "%;background:" + barColor + ";border-radius:999px;transition:width .4s'></div>" +
             "</div>" +
           "</div>" : "") +
           (interest > 0 ? "<div style='font-size:11px;color:var(--muted);margin-top:6px'>Est. " + fmtInt(interest) + " in interest remaining at current payment</div>" : "") +
