@@ -593,12 +593,14 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
-      <div class="page-title">Dashboard</div>
-      <div class="dash-month-nav">
-        <button class="dash-month-btn" onclick="dashPrevMonth()">←</button>
-        <div class="dash-month-label" id="dash-month-label"></div>
-        <button class="dash-month-btn" onclick="dashNextMonth()">→</button>
-        <div class="dash-month-today" onclick="dashGoToday()" id="dash-today-btn" style="display:none">Today</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:8px">
+        <div class="page-title" style="margin-bottom:0">Dashboard</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="dash-month-btn" onclick="dashPrevMonth()">←</button>
+          <div class="dash-month-label" id="dash-month-label"></div>
+          <button class="dash-month-btn" onclick="dashNextMonth()">→</button>
+          <div class="dash-month-today" onclick="dashGoToday()" id="dash-today-btn" style="display:none">Today</div>
+        </div>
       </div>
       <div class="cards-grid" id="dash-cards"></div>
       <div class="section">
@@ -1847,7 +1849,7 @@ function allCategories() {
   (state.wants||[]).forEach(function(w) { if (w.name && !cats.includes(w.name)) cats.push(w.name); });
   if (!cats.includes('Income')) cats.push('Income');
   if (!cats.includes('Uncategorized')) cats.push('Uncategorized');
-  return cats;
+  return cats.sort(function(a, b) { return a.localeCompare(b); });
 }
 
 function spentInMonth(catName, y, m) {
