@@ -41,18 +41,18 @@ body{
   font-family:var(--sans);
   background:var(--navy);
   color:var(--white);
-  height:100vh;
-  overflow:hidden;
+  margin:0;
   font-size:14px;
   line-height:1.6;
 }
 
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
-.app{display:flex;height:100vh;overflow:hidden}
+.app{display:flex;min-height:100vh}
 
 /* SIDEBAR */
 .sidebar{
   width:220px;
+  min-width:220px;
   flex-shrink:0;
   background:var(--navy2);
   border-right:1px solid var(--border);
@@ -101,7 +101,7 @@ body{
 }
 
 /* MAIN */
-.main{flex:1;overflow-y:auto;padding:2rem}
+.main{flex:1;min-width:0;overflow-y:auto;padding:2rem}
 .page{display:none}
 .page.active{display:block}
 
@@ -1764,18 +1764,13 @@ function renderPage(page) {
     try {
       renders[page]();
     } catch(e) {
-      console.error('renderPage error on ' + page + ':', e);
-      // Show error on the page so user can report it
+      console.error('renderPage error on [' + page + ']:', e.message, e.stack);
       var pageEl = document.getElementById('page-' + page);
       if (pageEl) {
-        var errDiv = pageEl.querySelector('.render-error');
-        if (!errDiv) {
-          errDiv = document.createElement('div');
-          errDiv.className = 'render-error';
-          errDiv.style.cssText = 'margin:2rem;padding:1rem;background:rgba(192,57,43,.15);border:1px solid var(--red2);border-radius:8px;font-size:12px;color:var(--red2)';
-          pageEl.appendChild(errDiv);
-        }
-        errDiv.textContent = 'Error loading page: ' + e.message + ' (check console for details)';
+        pageEl.innerHTML = '<div style="margin:2rem;padding:1.5rem;background:rgba(192,57,43,.15);border:1px solid var(--red2);border-radius:10px">' +
+          '<div style="font-size:14px;font-weight:600;color:var(--red2);margin-bottom:8px">Error on ' + page + ' page</div>' +
+          '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">' + e.message + '</div>' +
+          '</div>';
       }
     }
   }
