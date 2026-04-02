@@ -1169,7 +1169,7 @@ tbody td.muted { color:var(--muted)!important; }
         </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Keyword</th><th>Category</th><th>Matches</th><th></th></tr></thead>
+            <thead><tr><th>Keyword</th><th>Category</th><th>Matches</th><th>Actions</th></tr></thead>
             <tbody id="rules-tbl"></tbody>
           </table>
         </div>
@@ -1207,6 +1207,7 @@ tbody td.muted { color:var(--muted)!important; }
         <select class="form-input" id="tx-type">
           <option value="expense">Expense</option>
           <option value="income">Income</option>
+          <option value="transfer">Transfer (CC payment, savings, etc.)</option>
         </select>
       </div>
       <div class="form-group">
@@ -3507,19 +3508,28 @@ function parsePNC(text) {
     var type = isNeg ? 'expense' : 'income';
     var cat = resolveCategory(desc, amt);
 
-    // Flag rows that LOOK like internal moves — pre-skip but user can override
+    // Detect transfers — these move checking money but aren't "spending"
     var autoSkip = false;
     var skipReason = '';
-    if (dUp.includes('MOBILE PAYMENT TO')) { autoSkip = true; skipReason = 'CC payment / transfer'; }
-    else if (dUp.includes('MEAFCU SV WEBXFR TRANSFER')) { autoSkip = true; skipReason = 'Internal transfer'; }
-    else if (dUp.includes('ONLINE TRANSFER FROM')) { autoSkip = true; skipReason = 'Internal transfer'; }
-    else if (dUp.includes('ATM TRANSACTION FEE REIMBURSEMENT') || dUp.includes('ATM SURCHARGE REIMB')) { autoSkip = true; skipReason = 'Fee reimbursement'; }
-    else if (dUp.includes('INTEREST PAYMENT') && amt < 5) { autoSkip = true; skipReason = 'Interest (tiny)'; }
+    var isTransfer = false;
 
-    // Large non-payroll deposits — flag but don't skip (user decides)
-    if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS')) {
+    if (dUp.includes('MOBILE PAYMENT TO')) {
+      isTransfer = true; cat = 'CC Payment'; skipReason = 'CC payment';
+    } else if (dUp.includes('MEAFCU SV WEBXFR TRANSFER') || dUp.includes('MEAFCU SV WEB')) {
+      isTransfer = true; cat = 'Transfer — Savings'; skipReason = 'Savings transfer';
+    } else if (dUp.includes('ONLINE TRANSFER FROM') || dUp.includes('ONLINE TRANSFER TO')) {
+      isTransfer = true; cat = 'Transfer'; skipReason = 'Account transfer';
+    } else if (dUp.includes('ATM TRANSACTION FEE REIMBURSEMENT') || dUp.includes('ATM SURCHARGE REIMB')) {
+      autoSkip = true; skipReason = 'Fee reimbursement (tiny)';
+    } else if (dUp.includes('INTEREST PAYMENT') && amt < 5) {
+      autoSkip = true; skipReason = 'Interest (tiny)';
+    }
+
+    if (isTransfer) type = 'transfer';
+
+    // Large non-payroll deposits — flag but don't skip
+    if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS') && !isTransfer) {
       skipReason = 'Large deposit — verify';
-      // Don't auto-skip, just flag it
     }
 
     results.push({
@@ -3530,6 +3540,7 @@ function parsePNC(text) {
       type: type,
       account: 'checking',
       pending: isPending,
+      transferOut: isTransfer && isNeg, // true = money left checking
       skip: autoSkip,
       skipReason: skipReason
     });
@@ -3823,7 +3834,8 @@ function confirmImport() {
           amount: row.amount,
           type: row.type,
           account: row.account || 'checking',
-          pending: false
+          pending: false,
+          transferOut: row.transferOut || false
         };
         replaced++;
         return;
@@ -3838,7 +3850,8 @@ function confirmImport() {
       amount: row.amount,
       type: row.type,
       account: row.account || 'checking',
-      pending: row.pending || false
+      pending: row.pending || false,
+      transferOut: row.transferOut || false
     });
     added++;
   });
@@ -4096,10 +4109,45 @@ function saveNewRule() {
 }
 
 function deleteRule(keyword) {
+  if (!confirm('Delete rule "' + keyword + '"? Existing transactions keep their categories.')) return;
   var overrides = loadOverrides();
   delete overrides[keyword];
   saveOverrides(overrides);
   showToast('Rule deleted: "' + keyword + '"');
+  renderMisc();
+}
+
+function editRuleCat(keyword, newCat) {
+  var overrides = loadOverrides();
+  var oldCat = overrides[keyword];
+  overrides[keyword] = newCat;
+  saveOverrides(overrides);
+
+  // Re-categorize matching transactions that still have the old category
+  var count = 0;
+  state.transactions.forEach(function(t) {
+    if (t.description.toUpperCase().includes(keyword) && t.category === oldCat) {
+      t.category = newCat;
+      count++;
+    }
+  });
+  if (count > 0) saveState();
+  showToast('"' + keyword + '" → ' + newCat + (count > 0 ? ' (' + count + ' updated)' : ''));
+  renderRules();
+}
+
+function reapplyRule(keyword) {
+  var overrides = loadOverrides();
+  var cat = overrides[keyword];
+  if (!cat) return;
+  var count = 0;
+  state.transactions.forEach(function(t) {
+    if (t.description.toUpperCase().includes(keyword)) {
+      if (t.category !== cat) { t.category = cat; count++; }
+    }
+  });
+  saveState();
+  showToast(count > 0 ? count + ' transactions → ' + cat : 'All matches already categorized');
   renderMisc();
 }
 
@@ -4110,21 +4158,37 @@ function renderRules() {
   var keys = Object.keys(overrides).sort(function(a, b) { return a.localeCompare(b); });
 
   if (keys.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No rules yet — create one above or assign categories during import</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:1.5rem">No rules yet — create one above or assign categories during import</td></tr>';
     return;
   }
 
+  var cats = allCategories();
+  var catOpts = function(selected) {
+    return cats.map(function(c) {
+      return '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+  };
+
   tbody.innerHTML = keys.map(function(key) {
     var cat = overrides[key];
-    // Count matching transactions
+    var safeKey = key.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     var matches = state.transactions.filter(function(t) {
       return t.description.toUpperCase().includes(key);
     }).length;
+    var wrongCat = state.transactions.filter(function(t) {
+      return t.description.toUpperCase().includes(key) && t.category !== cat;
+    }).length;
+
     return '<tr>' +
       '<td style="font-family:var(--mono);font-size:12px">' + key + '</td>' +
-      '<td><span class="badge badge-muted">' + cat + '</span></td>' +
-      '<td class="muted" style="font-family:var(--mono)">' + matches + '</td>' +
-      '<td><button class="btn btn-ghost btn-sm" onclick="deleteRule(\'' + key.replace(/'/g, "\\'") + '\')" style="font-size:11px;color:var(--red2)">Delete</button></td>' +
+      '<td><select class="form-input" style="padding:3px 6px;font-size:11px;width:auto" onchange="editRuleCat(\'' + safeKey + '\',this.value)">' + catOpts(cat) + '</select></td>' +
+      '<td class="muted" style="font-family:var(--mono)">' + matches +
+        (wrongCat > 0 ? ' <span style="color:var(--amber2);font-size:10px">(' + wrongCat + ' wrong)</span>' : '') +
+      '</td>' +
+      '<td style="white-space:nowrap">' +
+        (wrongCat > 0 ? '<button class="btn btn-ghost btn-sm" onclick="reapplyRule(\'' + safeKey + '\')" style="font-size:10px;color:var(--teal2);margin-right:4px">Re-apply</button>' : '') +
+        '<button class="btn btn-ghost btn-sm" onclick="deleteRule(\'' + safeKey + '\')" style="font-size:10px;color:var(--red2)">Delete</button>' +
+      '</td>' +
     '</tr>';
   }).join('');
 }
@@ -5014,7 +5078,12 @@ function computeCurrentBalance() {
     if (t.account === 'cc') return; // CC doesn't affect checking
     if (t.date > anchorDate && t.date <= todayStr) {
       var amt = parseFloat(t.amount || 0);
-      delta += (t.type === 'income' ? amt : -amt);
+      // Transfers: direction based on transferOut flag
+      if (t.type === 'transfer') {
+        delta += t.transferOut ? -amt : amt;
+      } else {
+        delta += (t.type === 'income' ? amt : -amt);
+      }
       txCount++;
     }
   });
@@ -5140,10 +5209,16 @@ function buildDayEvents(days, todayStr) {
     if (!t.date || !dayEvents[t.date]) return;
     if (t.account === 'cc') return;
     var amt = parseFloat(t.amount || 0);
+    var signedAmt;
+    if (t.type === 'transfer') {
+      signedAmt = t.transferOut ? -amt : amt;
+    } else {
+      signedAmt = t.type === 'income' ? amt : -amt;
+    }
     dayEvents[t.date].push({
       desc: t.description, category: t.category,
-      amount: t.type === 'income' ? amt : -amt,
-      type: t.type === 'income' ? 'income' : 'expense',
+      amount: signedAmt,
+      type: t.type,
       confirmed: true,
       txId: t.id
     });
