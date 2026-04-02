@@ -787,18 +787,19 @@ tbody td.muted { color:var(--muted)!important; }
       <!-- Controls -->
       <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1.25rem;border-color:var(--teal)">
         <div style="display:flex;gap:1.5rem;align-items:flex-end;flex-wrap:wrap">
-          <div class="form-group" style="max-width:200px">
-            <label class="form-label">Total monthly debt budget ($)</label>
-            <input class="form-input" id="av-budget" type="number" step="1" placeholder="1940" oninput="renderAvalanche()">
-            <div style="font-size:10px;color:var(--muted);margin-top:3px">Min payments total: <span id="av-min-total">—</span></div>
-          </div>
           <div class="form-group" style="max-width:160px">
-            <label class="form-label">Extra/mo above mins ($)</label>
-            <div class="form-input" id="av-extra-display" style="background:transparent;border:none;padding:9px 0;font-weight:700;color:var(--teal2)">—</div>
+            <label class="form-label">Minimums (locked)</label>
+            <div class="form-input" id="av-min-display" style="background:rgba(255,255,255,.03);cursor:default;color:var(--muted)">—</div>
           </div>
-          <div style="display:flex;gap:8px;align-self:flex-end">
-            <button class="btn btn-ghost btn-sm" onclick="avSetBudget('current')" style="font-size:11px">Use current</button>
-            <button class="btn btn-ghost btn-sm" onclick="avSetBudget('min')" style="font-size:11px">Mins only</button>
+          <div style="font-size:20px;color:var(--muted);align-self:center;padding-bottom:4px">+</div>
+          <div class="form-group" style="max-width:180px">
+            <label class="form-label">Extra $/mo toward debt</label>
+            <input class="form-input" id="av-extra" type="number" step="1" placeholder="0" value="0" oninput="renderAvalanche()" style="border-color:var(--teal);font-weight:600;color:var(--teal2)">
+          </div>
+          <div style="font-size:20px;color:var(--muted);align-self:center;padding-bottom:4px">=</div>
+          <div class="form-group" style="max-width:160px">
+            <label class="form-label">Total/mo</label>
+            <div class="form-input" id="av-total-display" style="background:transparent;border:none;padding:9px 0;font-weight:700;color:var(--white);font-size:16px">—</div>
           </div>
         </div>
       </div>
@@ -2005,6 +2006,46 @@ function spentInMonth(catName, y, m) {
     .reduce((s, t) => s + parseFloat(t.amount || 0), 0);
 }
 
+// What should the budget be for this item in a specific month?
+// Monthly items: always item.amt
+// Non-monthly items: full rawAmt in payment months, $0 in others
+function budgetForMonth(item, y, m) {
+  if (!item.freq || item.freq === 'monthly' || item.freq === 'weekly' || item.freq === 'biweekly') {
+    return item.amt; // monthly equivalent always applies
+  }
+
+  // For quarterly/semiannual/annual — check if a recurring rule fires this month
+  var ruleFires = false;
+  if (state.recurring && state.recurring.length > 0) {
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateStr = y + '-' + String(m + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      var items = getRecurringForDate(dateStr);
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].desc === item.name || items[j].category === item.name) {
+          ruleFires = true;
+          break;
+        }
+      }
+      if (ruleFires) break;
+    }
+  }
+
+  // Also check if there's actual spending this month (covers cases without recurring rules)
+  if (!ruleFires) {
+    var spent = spentInMonth(item.name, y, m);
+    if (spent > 0) ruleFires = true;
+  }
+
+  if (ruleFires) {
+    // Payment month — budget the full period amount
+    return item.rawAmt || item.amt;
+  }
+
+  // Not a payment month — $0 budget (don't penalize)
+  return 0;
+}
+
 function spentInWeek(catName) {
   return state.transactions
     .filter(t => t.category === catName && t.type === 'expense' && txInWeek(t))
@@ -2204,9 +2245,9 @@ function renderGroupedProgress(y, m) {
 
   groups.forEach(function(g) {
     var isOpen = !collapsed[g.id];
-    var groupBudget = g.items.reduce(function(s,c){ return s + c.amt; }, 0);
+    var groupBudget = g.items.reduce(function(s,c){ return s + budgetForMonth(c, y, m); }, 0);
     var groupSpent  = g.items.reduce(function(s,c){ return s + spentInMonth(c.name, y, m); }, 0);
-    var groupOver   = groupSpent > groupBudget;
+    var groupOver   = groupSpent > groupBudget && groupBudget > 0;
 
     // Group header mini-bar — dual color when over
     var miniBar = '';
@@ -2245,15 +2286,21 @@ function renderGroupedProgress(y, m) {
 
     g.items.forEach(function(cat) {
       var spent = spentInMonth(cat.name, y, m);
-      var over  = spent > cat.amt && cat.amt > 0;
-      var overAmt = over ? spent - cat.amt : 0;
-      var overPct = over ? Math.round(overAmt / cat.amt * 100) : 0;
+      var catBudget = budgetForMonth(cat, y, m);
+      var over  = spent > catBudget && catBudget > 0;
+      var overAmt = over ? spent - catBudget : 0;
+      var overPct = over ? Math.round(overAmt / catBudget * 100) : 0;
 
       // Bar rendering
       var barHtml = '';
-      if (over) {
-        // Dual-color: green = budget portion, amber/red = overage
-        var greenW = Math.round(cat.amt / spent * 100);
+      if (catBudget === 0 && spent === 0) {
+        // Not due this month, no spend — thin empty bar
+        barHtml = '<div class="progress-track" style="height:5px"><div class="progress-fill" style="width:0"></div></div>';
+      } else if (catBudget === 0 && spent > 0) {
+        // Not due but there's spend — show as unexpected (amber)
+        barHtml = '<div class="progress-track" style="height:5px"><div class="progress-fill fill-warn" style="width:100%"></div></div>';
+      } else if (over) {
+        var greenW = Math.round(catBudget / spent * 100);
         var overW  = 100 - greenW;
         var overColor = overPct > 20 ? 'bar-dual-bad' : 'bar-dual-over';
         barHtml = '<div class="progress-track" style="height:5px">' +
@@ -2262,20 +2309,23 @@ function renderGroupedProgress(y, m) {
             '<div class="' + overColor + '" style="width:' + overW + '%"></div>' +
           '</div></div>';
       } else {
-        var pct = cat.amt > 0 ? Math.min(Math.round(spent/cat.amt*100), 100) : 0;
+        var pct = catBudget > 0 ? Math.min(Math.round(spent/catBudget*100), 100) : 0;
         barHtml = '<div class="progress-track" style="height:5px">' +
           '<div class="progress-fill fill-good" style="width:' + pct + '%"></div></div>';
       }
 
-      // Label — show overage amount when over
+      // Label
       var labelRight = '';
-      if (over) {
+      var notDue = catBudget === 0 && cat.freq && cat.freq !== 'monthly';
+      if (notDue && spent === 0) {
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">not due · ' + freqLabel(cat.freq) + '</span>';
+      } else if (over) {
         labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--red2)">' +
-          fmtInt(spent) + ' / ' + fmtInt(cat.amt) +
+          fmtInt(spent) + ' / ' + fmtInt(catBudget) +
           ' <span style="font-weight:600">+' + fmtInt(overAmt) + '</span></span>';
       } else {
         labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' +
-          fmtInt(spent) + ' / ' + fmtInt(cat.amt) + '</span>';
+          fmtInt(spent) + ' / ' + fmtInt(catBudget) + '</span>';
       }
 
       html += '<div class="progress-wrap" style="padding-left:16px;margin-bottom:10px">' +
@@ -2405,7 +2455,7 @@ function renderDashboard() {
   var todayBtn = document.getElementById('dash-today-btn');
   if (todayBtn) todayBtn.style.display = isCurrent ? 'none' : 'block';
 
-  var totalBudget = state.needs.reduce((s,n) => s+n.amt, 0) + state.wants.reduce((s,w) => s+w.amt, 0);
+  var totalBudget = state.needs.reduce(function(s,n){ return s + budgetForMonth(n, y, m); }, 0) + state.wants.reduce(function(s,w){ return s + budgetForMonth(w, y, m); }, 0);
   var totalSpent = state.transactions
     .filter(t => t.type === 'expense' && txInMonth(t, y, m))
     .reduce((s, t) => s + parseFloat(t.amount || 0), 0);
@@ -2534,8 +2584,8 @@ function renderMonthly() {
   var y = plMonth.year, m = plMonth.month;
   document.getElementById('pl-month-display').textContent = monthStr(y, m);
 
-  var needsBudget = state.needs.reduce((s,n) => s+n.amt, 0);
-  var wantsBudget = state.wants.reduce((s,w) => s+w.amt, 0);
+  var needsBudget = state.needs.reduce(function(s,n){ return s + budgetForMonth(n, y, m); }, 0);
+  var wantsBudget = state.wants.reduce(function(s,w){ return s + budgetForMonth(w, y, m); }, 0);
   var totalBudget = needsBudget + wantsBudget;
   var totalSpent = state.transactions.filter(t => t.type==='expense' && txInMonth(t,y,m)).reduce((s,t) => s+parseFloat(t.amount||0), 0);
   var incomeActual = actualOrExpectedIncome(y, m);
@@ -2552,20 +2602,22 @@ function renderMonthly() {
   var allCats = [...state.needs, ...state.wants];
   var tbody = document.getElementById('pl-cats');
   var rows = '';
-  // needs
   rows += '<tr class="subhdr"><td colspan="5">Needs</td></tr>';
-  state.needs.forEach(cat => {
+  state.needs.forEach(function(cat) {
     var spent = spentInMonth(cat.name, y, m);
-    var pct = cat.amt > 0 ? Math.round(spent/cat.amt*100) : 0;
-    var diff = cat.amt - spent;
-    rows += '<tr><td>' + cat.name + '</td><td class="r">' + fmtInt(cat.amt) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
+    var catBudget = budgetForMonth(cat, y, m);
+    var pct = catBudget > 0 ? Math.round(spent/catBudget*100) : 0;
+    var diff = catBudget - spent;
+    var notDue = catBudget === 0 && cat.freq && cat.freq !== 'monthly';
+    rows += '<tr style="' + (notDue && spent === 0 ? 'opacity:.4' : '') + '"><td>' + cat.name + (notDue ? ' <span style="font-size:10px;color:var(--muted)">(' + freqLabel(cat.freq) + ')</span>' : '') + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + (notDue && spent === 0 ? 'badge-muted' : badgeClass(pct)) + '">' + (notDue && spent === 0 ? 'N/A' : pct + '%') + '</span></td></tr>';
   });
   rows += '<tr class="subhdr"><td colspan="5">Wants</td></tr>';
-  state.wants.forEach(cat => {
+  state.wants.forEach(function(cat) {
     var spent = spentInMonth(cat.name, y, m);
-    var pct = cat.amt > 0 ? Math.round(spent/cat.amt*100) : 0;
-    var diff = cat.amt - spent;
-    rows += '<tr><td>' + cat.name + '</td><td class="r">' + fmtInt(cat.amt) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
+    var catBudget = budgetForMonth(cat, y, m);
+    var pct = catBudget > 0 ? Math.round(spent/catBudget*100) : 0;
+    var diff = catBudget - spent;
+    rows += '<tr><td>' + cat.name + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
   });
   rows += '<tr class="total-row"><td>Total</td><td class="r">' + fmtInt(totalBudget) + '</td><td class="r">' + fmtInt(totalSpent) + '</td><td class="r" style="color:' + (net>=0?'var(--teal2)':'var(--red2)') + '">' + (net>=0?'+':'-') + fmtInt(Math.abs(net)) + '</td><td></td></tr>';
   tbody.innerHTML = rows;
@@ -2644,6 +2696,33 @@ function renderTxPage() {
 
 // ─── NEEDS / WANTS ────────────────────────────────────────────────────────────
 
+// Check if a budget item is synced with a recurring rule
+function getBudgetSyncStatus(name, budgetAmt) {
+  if (!state.recurring || state.recurring.length === 0) return { status: 'none' };
+  var match = state.recurring.find(function(r) {
+    return r.active && r.billType !== 'income' && (r.name === name || r.category === name);
+  });
+  if (!match) return { status: 'none' };
+  var rMonthly = recurringMonthlyAmt(match);
+  var rFreq = recurringToFreq(match.schedule);
+  var rRaw = (rFreq === 'monthly' && match.schedule === 'bimonthly') ? rMonthly : match.amount;
+  if (rMonthly === budgetAmt) return { status: 'synced' };
+  return { status: 'mismatch', recurringAmt: rMonthly, recurringRawAmt: rRaw, recurringFreq: rFreq, ruleName: match.name };
+}
+
+// Quick-sync a single budget item from its recurring rule
+function quickSyncItem(type, idx, monthlyAmt, rawAmt, freq) {
+  var arr = type === 'need' ? state.needs : state.wants;
+  if (!arr[idx]) return;
+  var oldAmt = arr[idx].amt;
+  arr[idx].amt = monthlyAmt;
+  arr[idx].rawAmt = rawAmt;
+  arr[idx].freq = freq;
+  saveState();
+  showToast(arr[idx].name + ': ' + fmtInt(oldAmt) + ' → ' + fmtInt(monthlyAmt) + '/mo');
+  renderPage(currentPage);
+}
+
 function renderNeeds() {
   var collapsed = getCollapsed();
   var groups = {};
@@ -2670,8 +2749,21 @@ function renderNeeds() {
         if (n.freq && n.freq !== 'monthly') {
           freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(n.rawAmt || n.amt) + ' ' + freqLabel(n.freq || 'monthly') + '</div>';
         }
+
+        // Sync status with recurring
+        var syncInfo = getBudgetSyncStatus(n.name, n.amt);
+        var syncDot = '';
+        if (syncInfo.status === 'synced') {
+          syncDot = '<span title="Synced with recurring" style="color:var(--teal2);font-size:10px;margin-right:6px;cursor:default">●</span>';
+        } else if (syncInfo.status === 'mismatch') {
+          syncDot = '<span title="Recurring says ' + fmtInt(syncInfo.recurringAmt) + '/mo — click to sync" style="color:var(--amber2);font-size:10px;margin-right:4px;cursor:pointer" onclick="event.stopPropagation();quickSyncItem(\'need\',' + n.idx + ',' + syncInfo.recurringAmt + ',' + syncInfo.recurringRawAmt + ',\'' + (syncInfo.recurringFreq||'monthly') + '\')">●</span>' +
+            '<span onclick="event.stopPropagation();quickSyncItem(\'need\',' + n.idx + ',' + syncInfo.recurringAmt + ',' + syncInfo.recurringRawAmt + ',\'' + (syncInfo.recurringFreq||'monthly') + '\')" style="font-size:9px;color:var(--amber2);cursor:pointer;text-decoration:underline" title="Update to ' + fmtInt(syncInfo.recurringAmt) + '/mo from recurring">↻</span>';
+        } else {
+          syncDot = '<span title="No recurring rule linked" style="color:var(--muted);font-size:10px;margin-right:6px;opacity:.4;cursor:default">●</span>';
+        }
+
         html += '<tr>';
-        html += '<td style="padding-left:1.5rem">' + n.name + '</td>';
+        html += '<td style="padding-left:1.5rem">' + syncDot + n.name + '</td>';
         html += '<td class="r">' + fmtInt(n.amt) + '/mo' + freqNote + '</td>';
         html += '<td class="muted">' + (n.notes||'') + '</td>';
         html += '<td><button class="btn btn-ghost btn-sm" onclick="openEditBudget(\'need\',' + n.idx + ')">Edit</button></td>';
@@ -2756,17 +2848,7 @@ function renderBudgetPlan() {
 
 function renderRoadmap() { renderAvalanche(); }
 
-function avSetBudget(mode) {
-  var input = document.getElementById('av-budget');
-  if (mode === 'current') {
-    var total = (state.debts||[]).reduce(function(s,d){ return s + (d.payment||0); }, 0);
-    input.value = total;
-  } else if (mode === 'min') {
-    var total = (state.debts||[]).reduce(function(s,d){ return s + (d.minPayment||d.payment||0); }, 0);
-    input.value = total;
-  }
-  renderAvalanche();
-}
+// avSetBudget is no longer needed — minimums are locked, user inputs extra directly
 
 // Run the full avalanche simulation
 function runAvalanche(debts, monthlyBudget) {
@@ -2891,16 +2973,17 @@ function renderAvalanche() {
   }
 
   var totalMin = debts.reduce(function(s,d){ return s + (d.minPayment||d.payment||0); }, 0);
-  var totalPlanned = debts.reduce(function(s,d){ return s + (d.payment||0); }, 0);
 
-  // Get budget from input or use planned total
-  var budgetInput = document.getElementById('av-budget');
-  var budget = parseFloat(budgetInput.value) || totalPlanned;
-  if (!budgetInput.value) budgetInput.value = totalPlanned;
+  // Extra is the user input — minimums are locked
+  var extraInput = document.getElementById('av-extra');
+  var extra = parseFloat(extraInput ? extraInput.value : 0) || 0;
+  var budget = totalMin + extra;
 
-  var extra = Math.max(0, budget - totalMin);
-  document.getElementById('av-min-total').textContent = fmtInt(totalMin);
-  document.getElementById('av-extra-display').textContent = extra > 0 ? '+' + fmtInt(extra) + '/mo' : '$0';
+  // Update displays
+  var minDisplay = document.getElementById('av-min-display');
+  if (minDisplay) minDisplay.textContent = fmtInt(totalMin) + '/mo';
+  var totalDisplay = document.getElementById('av-total-display');
+  if (totalDisplay) totalDisplay.textContent = fmtInt(budget) + '/mo';
 
   // Run both simulations
   var avalanche = runAvalanche(debts, budget);
@@ -4286,7 +4369,8 @@ function updateAlertBadge() {
   var urgentCount = 0;
   state.needs.concat(state.wants).forEach(function(cat) {
     var spent = spentInMonth(cat.name, y, m);
-    if (spent > cat.amt && cat.amt > 0) urgentCount++;
+    var catBudget = budgetForMonth(cat, y, m);
+    if (spent > catBudget && catBudget > 0) urgentCount++;
   });
   if (!DB.token) urgentCount++;
   var dbdS = typeof dbdSettings === 'function' ? dbdSettings() : {};
@@ -4895,6 +4979,7 @@ function syncRecurringToBudget(rule) {
     match.amt = monthlyAmt;
     match.rawAmt = rawAmt;
     match.freq = freq;
+    return;
   }
   // Also check wants
   var wMatch = state.wants.find(function(w) {
@@ -4904,7 +4989,17 @@ function syncRecurringToBudget(rule) {
     wMatch.amt = monthlyAmt;
     wMatch.rawAmt = rawAmt;
     wMatch.freq = freq;
+    return;
   }
+  // No match found — auto-create in Needs
+  state.needs.push({
+    name: rule.name,
+    amt: monthlyAmt,
+    rawAmt: rawAmt,
+    freq: freq,
+    notes: 'Auto-created from recurring: ' + scheduleLabel(rule),
+    group: 'Other'
+  });
 }
 
 // Bulk sync — collect conflicts, show modal for user to choose
@@ -5504,10 +5599,12 @@ function renderAlerts() {
   var y = plMonth.year, m = plMonth.month;
   state.needs.concat(state.wants).forEach(function(cat) {
     var spent = spentInMonth(cat.name, y, m);
-    if (spent > cat.amt && cat.amt > 0) {
-      urgent.push({ icon:'🔴', title: cat.name + ' over budget', body: 'Spent ' + fmtInt(spent) + ' vs ' + fmtInt(cat.amt) + ' budget — ' + fmtInt(spent-cat.amt) + ' over', cls:'urgent' });
-    } else if (spent > cat.amt * 0.85 && cat.amt > 0) {
-      upcoming.push({ icon:'🟡', title: cat.name + ' near limit', body: fmtInt(spent) + ' of ' + fmtInt(cat.amt) + ' (' + Math.round(spent/cat.amt*100) + '%)', cls:'warn' });
+    var catBudget = budgetForMonth(cat, y, m);
+    if (catBudget === 0) return; // not due this month
+    if (spent > catBudget) {
+      urgent.push({ icon:'🔴', title: cat.name + ' over budget', body: 'Spent ' + fmtInt(spent) + ' vs ' + fmtInt(catBudget) + ' budget — ' + fmtInt(spent-catBudget) + ' over', cls:'urgent' });
+    } else if (spent > catBudget * 0.85) {
+      upcoming.push({ icon:'🟡', title: cat.name + ' near limit', body: fmtInt(spent) + ' of ' + fmtInt(catBudget) + ' (' + Math.round(spent/catBudget*100) + '%)', cls:'warn' });
     }
   });
 
