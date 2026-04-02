@@ -4491,9 +4491,11 @@ var dbdView  = 'day';   // 'day' | 'week' | 'month'
 var dbdRange = 30;      // days forward: 30 | 60 | 90
 
 function dbdSettings() {
-  // Stored in state so Dropbox syncs it — fallback to localStorage for legacy
-  if (state.dbdSettings) return state.dbdSettings;
-  try { return JSON.parse(localStorage.getItem('dbd_settings') || '{}'); } catch(e) { return {}; }
+  try {
+    var local = JSON.parse(localStorage.getItem('dbd_settings') || '{}');
+    if (local && Object.keys(local).length > 0) return local;
+  } catch(e) {}
+  return (state.dbdSettings && Object.keys(state.dbdSettings).length > 0) ? state.dbdSettings : {};
 }
 
 function saveDayByDaySettings() {
@@ -4504,8 +4506,9 @@ function saveDayByDaySettings() {
   if (!isNaN(danger)) s.dangerThreshold = danger;
   s.view  = dbdView;
   s.range = dbdRange;
+  // Store in state but use localStorage directly to avoid triggering re-render loop
   state.dbdSettings = s;
-  saveState();
+  try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
 }
 
 // Explicit balance update with timestamp
@@ -4516,7 +4519,7 @@ function dbdUpdateBalance() {
   s.balance = bal;
   s.balanceUpdated = new Date().toISOString();
   state.dbdSettings = s;
-  saveState();
+  try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
   dbdShowTimestamp(s.balanceUpdated);
   showToast('Balance updated to $' + Math.round(bal).toLocaleString());
   renderDayByDay();
