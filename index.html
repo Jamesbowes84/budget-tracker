@@ -355,6 +355,19 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .group-hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono);color:var(--muted)}
 .group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
 .group-chevron.open{transform:rotate(90deg)}
+.group-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.group-body.collapsed { max-height: 0 !important; }
+
+/* Dual-color over-budget bar */
+.bar-dual {
+  display:flex;height:100%;border-radius:999px;overflow:hidden;
+}
+.bar-dual-good { background:linear-gradient(90deg,var(--teal),var(--teal2)); }
+.bar-dual-over { background:linear-gradient(90deg,var(--amber),var(--amber2)); }
+.bar-dual-bad  { background:linear-gradient(90deg,var(--red),var(--red2)); }
 .group-/* MONTH NAV on dashboard */
 .dash-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
 .dash-month-btn{background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:14px;font-family:var(--sans);transition:all .15s}
@@ -1979,7 +1992,35 @@ function toggleGroup(groupId) {
   var collapsed = getCollapsed();
   collapsed[groupId] = !collapsed[groupId];
   setCollapsed(collapsed);
-  // Re-render just the progress section
+
+  // Needs page — re-render table rows (no animation needed)
+  if (groupId.startsWith('needs-')) {
+    renderNeeds();
+    return;
+  }
+
+  // Dashboard — animate existing DOM elements
+  var body = document.getElementById('gbody-' + groupId);
+  var chevEl = document.querySelector('[onclick*="\'' + groupId + '\'"] .group-chevron');
+  var hdrRight = document.querySelector('[onclick*="\'' + groupId + '\'"] .group-hdr-right');
+
+  if (body) {
+    var isNowCollapsed = collapsed[groupId];
+    if (isNowCollapsed) {
+      body.style.maxHeight = body.scrollHeight + 'px';
+      body.offsetHeight; // force reflow
+      body.classList.add('collapsed');
+      body.style.maxHeight = '0';
+    } else {
+      body.classList.remove('collapsed');
+      var items = body.querySelectorAll('.progress-wrap');
+      body.style.maxHeight = (items.length * 60) + 'px';
+    }
+    if (chevEl) chevEl.classList.toggle('open', !isNowCollapsed);
+    return;
+  }
+
+  // Fallback — full re-render
   var y = plMonth.year, m = plMonth.month;
   var prog = document.getElementById('dash-progress');
   if (prog) prog.innerHTML = renderGroupedProgress(y, m);
@@ -2005,8 +2046,23 @@ function renderGroupedProgress(y, m) {
     var isOpen = !collapsed[g.id];
     var groupBudget = g.items.reduce(function(s,c){ return s + c.amt; }, 0);
     var groupSpent  = g.items.reduce(function(s,c){ return s + spentInMonth(c.name, y, m); }, 0);
-    var groupPct    = groupBudget > 0 ? Math.min(Math.round(groupSpent/groupBudget*100), 100) : 0;
     var groupOver   = groupSpent > groupBudget;
+
+    // Group header mini-bar — dual color when over
+    var miniBar = '';
+    if (groupOver && groupBudget > 0) {
+      var greenW = Math.round(groupBudget / groupSpent * 100);
+      var redW   = 100 - greenW;
+      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
+        '<div class="bar-dual" style="width:100%">' +
+          '<div class="bar-dual-good" style="width:' + greenW + '%"></div>' +
+          '<div class="bar-dual-bad" style="width:' + redW + '%"></div>' +
+        '</div></div>';
+    } else {
+      var groupPct = groupBudget > 0 ? Math.min(Math.round(groupSpent/groupBudget*100), 100) : 0;
+      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
+        '<div style="height:100%;width:' + groupPct + '%;background:var(--teal);border-radius:999px"></div></div>';
+    }
 
     html += '<div style="margin-bottom:12px">';
 
@@ -2017,33 +2073,57 @@ function renderGroupedProgress(y, m) {
         g.label +
       '</div>' +
       '<div class="group-hdr-right">' +
-        '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
-          '<div style="height:100%;width:' + groupPct + '%;background:' + (groupOver?'var(--red)':groupPct>80?'var(--amber)':'var(--teal)') + ';border-radius:999px"></div>' +
-        '</div>' +
+        miniBar +
         '<span style="color:' + (groupOver?'var(--red2)':'var(--muted)') + '">' + fmtInt(groupSpent) + ' / ' + fmtInt(groupBudget) + '</span>' +
-        (groupOver ? '<span style="color:var(--red2);font-size:10px">OVER</span>' : '') +
+        (groupOver ? '<span style="color:var(--red2);font-size:10px;font-weight:600">+' + fmtInt(groupSpent - groupBudget) + ' OVER</span>' : '') +
       '</div>' +
     '</div>';
 
-    // Group body — individual items
-    var maxH = isOpen ? (g.items.length * 60) + 'px' : '0px';
-    html += '<div class="group-body" style="max-height:' + maxH + '">';
+    // Group body — individual items with dual-color bars
+    var maxH = isOpen ? (g.items.length * 60) + 'px' : '0';
+    html += '<div class="group-body' + (isOpen ? '' : ' collapsed') + '" id="gbody-' + g.id + '" style="max-height:' + maxH + '">';
 
     g.items.forEach(function(cat) {
       var spent = spentInMonth(cat.name, y, m);
-      var pct   = cat.amt > 0 ? Math.min(Math.round(spent/cat.amt*100), 100) : 0;
-      var over  = spent > cat.amt;
+      var over  = spent > cat.amt && cat.amt > 0;
+      var overAmt = over ? spent - cat.amt : 0;
+      var overPct = over ? Math.round(overAmt / cat.amt * 100) : 0;
+
+      // Bar rendering
+      var barHtml = '';
+      if (over) {
+        // Dual-color: green = budget portion, amber/red = overage
+        var greenW = Math.round(cat.amt / spent * 100);
+        var overW  = 100 - greenW;
+        var overColor = overPct > 20 ? 'bar-dual-bad' : 'bar-dual-over';
+        barHtml = '<div class="progress-track" style="height:5px">' +
+          '<div class="bar-dual" style="width:100%">' +
+            '<div class="bar-dual-good" style="width:' + greenW + '%"></div>' +
+            '<div class="' + overColor + '" style="width:' + overW + '%"></div>' +
+          '</div></div>';
+      } else {
+        var pct = cat.amt > 0 ? Math.min(Math.round(spent/cat.amt*100), 100) : 0;
+        barHtml = '<div class="progress-track" style="height:5px">' +
+          '<div class="progress-fill fill-good" style="width:' + pct + '%"></div></div>';
+      }
+
+      // Label — show overage amount when over
+      var labelRight = '';
+      if (over) {
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--red2)">' +
+          fmtInt(spent) + ' / ' + fmtInt(cat.amt) +
+          ' <span style="font-weight:600">+' + fmtInt(overAmt) + '</span></span>';
+      } else {
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' +
+          fmtInt(spent) + ' / ' + fmtInt(cat.amt) + '</span>';
+      }
+
       html += '<div class="progress-wrap" style="padding-left:16px;margin-bottom:10px">' +
         '<div class="progress-label">' +
-          '<span style="font-size:12px">' + cat.name + '</span>' +
-          '<span style="font-family:var(--mono);font-size:11px;color:' + (over?'var(--red2)':'var(--muted)') + '">' +
-            fmtInt(spent) + ' / ' + fmtInt(cat.amt) +
-            (over ? ' <span style="color:var(--red2)">OVER</span>' : '') +
-          '</span>' +
+          '<span style="font-size:12px;color:' + (over?'var(--red2)':'var(--white)') + '">' + cat.name + '</span>' +
+          labelRight +
         '</div>' +
-        '<div class="progress-track" style="height:5px">' +
-          '<div class="progress-fill ' + barClass(pct) + '" style="width:' + pct + '%"></div>' +
-        '</div>' +
+        barHtml +
       '</div>';
     });
 
