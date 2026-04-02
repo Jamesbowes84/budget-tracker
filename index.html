@@ -41,13 +41,14 @@ body{
   font-family:var(--sans);
   background:var(--navy);
   color:var(--white);
-  min-height:100vh;
+  height:100vh;
+  overflow:hidden;
   font-size:14px;
   line-height:1.6;
 }
 
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
-.app{display:flex;min-height:100vh}
+.app{display:flex;height:100vh;overflow:hidden}
 
 /* SIDEBAR */
 .sidebar{
@@ -354,9 +355,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .group-hdr-right{display:flex;align-items:center;gap:10px;font-size:11px;font-family:var(--mono);color:var(--muted)}
 .group-chevron{font-size:10px;transition:transform .2s;display:inline-block}
 .group-chevron.open{transform:rotate(90deg)}
-.group-body{overflow:hidden;transition:max-height .25s ease}
-
-/* MONTH NAV on dashboard */
+.group-/* MONTH NAV on dashboard */
 .dash-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:1.5rem}
 .dash-month-btn{background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:14px;font-family:var(--sans);transition:all .15s}
 .dash-month-btn:hover{color:var(--white);border-color:var(--teal)}
@@ -428,7 +427,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .alert-item.success  { border-left:3px solid var(--teal) }
 .alert-icon { font-size:18px;flex-shrink:0;margin-top:1px }
 .alert-title { font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px }
-.alert-body  { font-size:12px;color:var(--muted) }
+.alert-/* removed bad body rule */
 
 
 /* ─── SIDEBAR SCROLL + COLLAPSIBLE ──────────────────────────────── */
@@ -450,8 +449,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .nav-section-hdr:hover { color:var(--white); }
 .nav-sec-chevron { font-size:10px;transition:transform .2s; }
 .nav-sec-chevron.collapsed { transform:rotate(-90deg); }
-.nav-section-body { overflow:hidden;transition:max-height .25s ease; }
-.nav-section-body.collapsed { max-height:0!important; }
+.nav-section-.nav-section-body.collapsed { max-height:0!important; }
 
 
 .cal-more-btn { font-size:9px;color:var(--teal2);cursor:pointer;padding:1px 0;user-select:none }
