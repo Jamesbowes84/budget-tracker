@@ -460,7 +460,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .cal-bill[onclick]:hover { filter:brightness(1.3);transform:translateX(1px); }
 
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1638,9 +1638,7 @@ var DEFAULT_STATE = {
   ccOriginal: 0,
   transactions: [],
   dayItems: [],
-  dbdSettings: {},
   dayItems: [],
-  dbdSettings: {},
   needs: [
     {name:"Mortgage / Rent", amt:0, notes:"Fixed monthly", group:"Housing"},
     {name:"Car Payment", amt:0, notes:"Fixed monthly", group:"Housing"},
@@ -4031,7 +4029,7 @@ function renderNetWorth() {
   destroyChart('nw');
   var ctx = document.getElementById('nw-chart');
   if (ctx && state.nwHistory.length > 1) {
-    rptCharts['nw'] = new Chart(ctx, {
+    try { rptCharts['nw'] = new Chart(ctx, {
       type: 'line',
       data: {
         labels: state.nwHistory.map(function(h){ return h.date; }),
@@ -4042,7 +4040,7 @@ function renderNetWorth() {
         ]
       },
       options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font:{size:11}, boxWidth:12, padding:12, color:'#8A9BAE' }}}, scales: { x:{grid:{display:false},ticks:{font:{size:10},color:'#8A9BAE'}}, y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{font:{size:10},color:'#8A9BAE',callback:function(v){return '$'+(Math.abs(v)>=1000?(v/1000).toFixed(0)+'k':v);}}}}}
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
   } else if (ctx && state.nwHistory.length <= 1) {
     // Draw current snapshot as single point placeholder
     var c = document.getElementById('nw-chart').getContext('2d');
@@ -4491,24 +4489,18 @@ var dbdView  = 'day';   // 'day' | 'week' | 'month'
 var dbdRange = 30;      // days forward: 30 | 60 | 90
 
 function dbdSettings() {
-  try {
-    var local = JSON.parse(localStorage.getItem('dbd_settings') || '{}');
-    if (local && Object.keys(local).length > 0) return local;
-  } catch(e) {}
-  return (state.dbdSettings && Object.keys(state.dbdSettings).length > 0) ? state.dbdSettings : {};
+  try { return JSON.parse(localStorage.getItem('dbd_settings') || '{}'); } catch(e) { return {}; }
 }
 
 function saveDayByDaySettings() {
   var s = dbdSettings();
-  var warnEl   = document.getElementById('dbd-warn');
-  var dangerEl = document.getElementById('dbd-danger');
-  var warn   = warnEl   ? parseFloat(warnEl.value)   : NaN;
-  var danger = dangerEl ? parseFloat(dangerEl.value) : NaN;
+  var warn   = parseFloat(document.getElementById('dbd-warn').value);
+  var danger = parseFloat(document.getElementById('dbd-danger').value);
   if (!isNaN(warn))   s.warnThreshold   = warn;
   if (!isNaN(danger)) s.dangerThreshold = danger;
   s.view  = dbdView;
   s.range = dbdRange;
-  try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
+  localStorage.setItem('dbd_settings', JSON.stringify(s));
 }
 
 // Explicit balance update with timestamp
@@ -4518,8 +4510,7 @@ function dbdUpdateBalance() {
   var s = dbdSettings();
   s.balance = bal;
   s.balanceUpdated = new Date().toISOString();
-  state.dbdSettings = s;
-  try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
+  localStorage.setItem('dbd_settings', JSON.stringify(s));
   dbdShowTimestamp(s.balanceUpdated);
   showToast('Balance updated to $' + Math.round(bal).toLocaleString());
   renderDayByDay();
@@ -4895,7 +4886,7 @@ function renderDbdChart(days, balances, todayStr, warn, danger) {
   var todayI = sampled.indexOf(todayStr);
   if (todayI === -1) todayI = sampled.findIndex(function(d){ return d >= todayStr; });
 
-  rptCharts['dbd'] = new Chart(ctx, {
+  try { rptCharts['dbd'] = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
@@ -4926,7 +4917,7 @@ function renderDbdChart(days, balances, todayStr, warn, danger) {
         y: { grid:{color:'rgba(255,255,255,.05)'}, ticks:{font:{size:10}, color:'#8A9BAE', callback:function(v){ return '$'+(Math.abs(v)>=1000?(v/1000).toFixed(0)+'k':v); }} }
       }
     }
-  });
+  }); } catch(e) { console.warn("Chart error:", e); }
 }
 
 function openAddDayItem() {
@@ -5146,7 +5137,7 @@ function renderDebts() {
       };
     });
 
-    rptCharts["debt-timeline"] = new Chart(tlCtx, {
+    try { rptCharts["debt-timeline"] = new Chart(tlCtx, {
       type: "line",
       data: { labels: tlLabels, datasets: datasets },
       options: {
@@ -5157,7 +5148,7 @@ function renderDebts() {
           y: { grid:{color:"rgba(255,255,255,.05)"}, ticks:{font:{size:10}, color:"#8A9BAE", callback:function(v){return "$"+Math.round(v/1000)+"k";}} }
         }
       }
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
   }
 }
 
@@ -5323,7 +5314,7 @@ function renderReports() {
   destroyChart('pl');
   var plCtx = document.getElementById('rpt-pl-chart');
   if (plCtx) {
-    rptCharts['pl'] = new Chart(plCtx, {
+    try { rptCharts['pl'] = new Chart(plCtx, {
       type: 'bar',
       data: {
         labels: labels,
@@ -5335,7 +5326,7 @@ function renderReports() {
         ]
       },
       options: chartOpts(true)
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
   }
 
   // Legend
@@ -5351,7 +5342,7 @@ function renderReports() {
   destroyChart('needs');
   var needsCtx = document.getElementById('rpt-needs-chart');
   if (needsCtx) {
-    rptCharts['needs'] = new Chart(needsCtx, {
+    try { rptCharts['needs'] = new Chart(needsCtx, {
       type: 'line',
       data: {
         labels: labels,
@@ -5366,7 +5357,7 @@ function renderReports() {
         })
       },
       options: chartOpts(false)
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
   }
 
   // ── Wants drift line chart
@@ -5374,7 +5365,7 @@ function renderReports() {
   destroyChart('wants');
   var wantsCtx = document.getElementById('rpt-wants-chart');
   if (wantsCtx) {
-    rptCharts['wants'] = new Chart(wantsCtx, {
+    try { rptCharts['wants'] = new Chart(wantsCtx, {
       type: 'line',
       data: {
         labels: labels,
@@ -5389,7 +5380,7 @@ function renderReports() {
         })
       },
       options: chartOpts(false)
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
   }
 
   // ── Donut — spend by category (period total)
@@ -5416,7 +5407,7 @@ function renderReports() {
   destroyChart('donut');
   var donutCtx = document.getElementById('rpt-donut');
   if (donutCtx && donutData.length > 0) {
-    rptCharts['donut'] = new Chart(donutCtx, {
+    try { rptCharts['donut'] = new Chart(donutCtx, {
       type: 'doughnut',
       data: {
         labels: donutLabels,
@@ -5428,7 +5419,7 @@ function renderReports() {
           callbacks: { label: function(ctx){ return ' ' + ctx.label + ': ' + fmtInt(ctx.raw) + ' (' + Math.round(ctx.raw/donutTotal*100) + '%)'; } }
         }}
       }
-    });
+    }); } catch(e) { console.warn("Chart error:", e); }
     var legend = document.getElementById('rpt-donut-legend');
     if (legend) legend.innerHTML = donutLabels.map(function(l,i){
       return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">' +
