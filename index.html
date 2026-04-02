@@ -585,7 +585,6 @@ tbody td.muted { color:var(--muted)!important; }
       <div class="nav-section-body" id="nav-budget">
         <div class="nav-item" onclick="nav('needs')"><span class="nav-icon">⬡</span> Needs</div>
         <div class="nav-item" onclick="nav('wants')"><span class="nav-icon">◈</span> Wants</div>
-        <div class="nav-item" onclick="nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
         <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Plan</div>
         <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Avalanche</div>
       </div>
@@ -623,6 +622,7 @@ tbody td.muted { color:var(--muted)!important; }
         </div>
       </div>
       <div class="cards-grid" id="dash-cards"></div>
+      <div id="dash-events" style="display:none;margin-bottom:1.5rem"></div>
       <div class="section">
         <div class="section-hdr">
           <div class="section-title">Spend vs budget</div>
@@ -747,23 +747,12 @@ tbody td.muted { color:var(--muted)!important; }
 
     <!-- SUBSCRIPTIONS -->
     <div class="page" id="page-subs">
-      <div class="page-title">Subscriptions</div>
-      <div class="page-sub" id="subs-summary"></div>
-      <div class="section">
-        <div class="section-hdr"><div class="section-title">Keeping</div></div>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>Service</th><th class="r">Monthly</th><th>Notes</th><th></th></tr></thead>
-          <tbody id="subs-keep"></tbody>
-        </table></div>
+      <div class="page-title">Subscriptions → Recurring</div>
+      <div class="page-sub">Subscriptions are now managed as recurring rules for a single source of truth.</div>
+      <div id="subs-migrate-area"></div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="nav('recurring')">Go to Recurring →</button>
       </div>
-      <div class="section">
-        <div class="section-hdr"><div class="section-title">To Cancel / Cancelled</div></div>
-        <div class="tbl-wrap"><table>
-          <thead><tr><th>Service</th><th class="r">Saving</th><th>Status</th><th></th></tr></thead>
-          <tbody id="subs-cut"></tbody>
-        </table></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="openAddSub()">+ Add Subscription</button>
     </div>
 
     <!-- BUDGET PLAN -->
@@ -794,7 +783,7 @@ tbody td.muted { color:var(--muted)!important; }
           <div style="font-size:20px;color:var(--muted);align-self:center;padding-bottom:4px">+</div>
           <div class="form-group" style="max-width:180px">
             <label class="form-label">Extra $/mo toward debt</label>
-            <input class="form-input" id="av-extra" type="number" step="1" placeholder="0" value="0" oninput="renderAvalanche()" style="border-color:var(--teal);font-weight:600;color:var(--teal2)">
+            <input class="form-input" id="av-extra" type="number" step="1" placeholder="0" value="0" oninput="this.dataset.touched='yes';renderAvalanche()" style="border-color:var(--teal);font-weight:600;color:var(--teal2)">
           </div>
           <div style="font-size:20px;color:var(--muted);align-self:center;padding-bottom:4px">=</div>
           <div class="form-group" style="max-width:160px">
@@ -802,6 +791,7 @@ tbody td.muted { color:var(--muted)!important; }
             <div class="form-input" id="av-total-display" style="background:transparent;border:none;padding:9px 0;font-weight:700;color:var(--white);font-size:16px">—</div>
           </div>
         </div>
+        <div id="av-free-cash-hint" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
       </div>
 
       <!-- Summary cards -->
@@ -2462,13 +2452,19 @@ function renderDashboard() {
   var incomeThisMonth = actualOrExpectedIncome(y, m);
   var left = incomeThisMonth - totalSpent;
 
+  // Free cash = income minus all budgeted needs+wants (monthly averages for planning)
+  var needsMonthly = state.needs.reduce(function(s,n){ return s + n.amt; }, 0);
+  var wantsMonthly = state.wants.reduce(function(s,w){ return s + w.amt; }, 0);
+  var freeCash = incomeThisMonth - needsMonthly - wantsMonthly;
+
   // Track active card filter
   if (typeof dashFilter === 'undefined') window.dashFilter = null;
 
   var cardDefs = [
     {label:'Income',    val:fmtInt(incomeThisMonth), note:label,                                                              cls:'good',    filter:'income'},
-    {label:'Spent',     val:fmtInt(totalSpent),      note:Math.round(totalSpent/totalBudget*100)+'% of budget',              cls:totalSpent>totalBudget?'bad':totalSpent/totalBudget>.8?'warn':'neutral', filter:'expense'},
+    {label:'Spent',     val:fmtInt(totalSpent),      note:Math.round(totalBudget>0?totalSpent/totalBudget*100:0)+'% of budget', cls:totalSpent>totalBudget?'bad':totalBudget>0&&totalSpent/totalBudget>.8?'warn':'neutral', filter:'expense'},
     {label:'Remaining', val:fmtInt(Math.abs(left)),  note:left>=0?'under budget':'over budget',                              cls:left>=0?'good':'bad', filter:'remaining'},
+    {label:'Free Cash', val:fmtInt(Math.abs(freeCash)), note:freeCash>=0?'available for debt/savings':'overallocated', cls:freeCash>=0?'good':'bad'},
   ];
 
   var cards = document.getElementById('dash-cards');
@@ -2484,6 +2480,36 @@ function renderDashboard() {
   // Progress bars — grouped and collapsible
   var prog = document.getElementById('dash-progress');
   if (prog) prog.innerHTML = renderGroupedProgress(y, m);
+
+  // Planned events from Day Items (upcoming one-offs)
+  var eventsEl = document.getElementById('dash-events');
+  if (eventsEl) {
+    var upcoming = (state.dayItems || []).filter(function(item) {
+      return item.date >= today() && item.type === 'expense';
+    }).sort(function(a,b){ return a.date.localeCompare(b.date); });
+
+    if (upcoming.length > 0) {
+      var evTotal = upcoming.reduce(function(s,e){ return s + parseFloat(e.amount||0); }, 0);
+      eventsEl.style.display = 'block';
+      eventsEl.innerHTML = '<div class="section" style="margin-bottom:0"><div class="section-hdr">' +
+        '<div class="section-title">Planned events</div>' +
+        '<button class="section-action" onclick="nav(\'daybyday\')">Manage →</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        upcoming.slice(0, 5).map(function(item, i) {
+          return '<div class="dbd-pill" onclick="nav(\'daybyday\')" style="cursor:pointer">' +
+            '<span style="color:var(--amber2);font-family:var(--mono);font-size:12px">-$' + Math.round(item.amount) + '</span>' +
+            '<span style="color:var(--white)">' + item.desc + '</span>' +
+            '<span style="font-size:10px;color:var(--muted)">' + dateFmt(item.date) + '</span>' +
+          '</div>';
+        }).join('') +
+        (upcoming.length > 5 ? '<span style="font-size:11px;color:var(--muted);align-self:center">+' + (upcoming.length-5) + ' more</span>' : '') +
+        '<span style="font-size:11px;color:var(--amber2);align-self:center;margin-left:auto;font-family:var(--mono)">' + fmtInt(evTotal) + ' total planned</span>' +
+      '</div></div>';
+    } else {
+      eventsEl.style.display = 'none';
+    }
+  }
 
   // Recent transactions — filtered by active card
   renderDashTx(y, m);
@@ -2791,19 +2817,53 @@ function renderWants() {
 // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
 function renderSubs() {
-  var keep = state.subscriptions.filter(s => s.status === 'keep');
-  var cut  = state.subscriptions.filter(s => s.status === 'cut');
-  var keepTotal = keep.reduce((s,x) => s+x.amt, 0);
-  var cutTotal  = cut.reduce((s,x)  => s+x.amt, 0);
-  document.getElementById('subs-summary').textContent = 'Keeping $' + Math.round(keepTotal) + '/mo · Saving $' + Math.round(cutTotal) + '/mo from cuts ($' + Math.round(cutTotal*12) + '/yr)';
-  document.getElementById('subs-keep').innerHTML = keep.map((s,i) => {
-    var realIdx = state.subscriptions.indexOf(s);
-    return '<tr><td>' + s.name + '</td><td class="r">' + fmtInt(s.amt) + '</td><td class="muted">' + (s.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditSub(' + realIdx + ')">Edit</button></td></tr>';
-  }).join('') + '<tr class="total-row"><td>Total</td><td class="r">' + fmtInt(keepTotal) + '</td><td colspan="2"></td></tr>';
-  document.getElementById('subs-cut').innerHTML = cut.map((s,i) => {
-    var realIdx = state.subscriptions.indexOf(s);
-    return '<tr><td style="color:var(--muted)">' + s.name + '</td><td class="r" style="color:var(--teal2)">+' + fmtInt(s.amt) + '</td><td class="muted">' + (s.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditSub(' + realIdx + ')">Edit</button></td></tr>';
-  }).join('') + '<tr class="total-row"><td>Total savings</td><td class="r" style="color:var(--teal2)">+' + fmtInt(cutTotal) + '/mo</td><td colspan="2"></td></tr>';
+  // Show migration status
+  var area = document.getElementById('subs-migrate-area');
+  if (!area) return;
+  var subs = state.subscriptions || [];
+  var keep = subs.filter(function(s){ return s.status === 'keep'; });
+  if (keep.length === 0) {
+    area.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted)">All subscriptions migrated to Recurring.</div>';
+    return;
+  }
+  area.innerHTML = '<div class="tbl-wrap" style="margin-bottom:1rem"><table>' +
+    '<thead><tr><th>Subscription</th><th class="r">Amount</th><th>Status</th></tr></thead><tbody>' +
+    subs.map(function(s) {
+      return '<tr><td>' + s.name + '</td><td class="r">' + fmtInt(s.amt) + '/mo</td><td>' + s.status + '</td></tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<button class="btn btn-primary" onclick="migrateSubscriptions()">Migrate ' + keep.length + ' subscriptions to Recurring</button>';
+}
+
+function migrateSubscriptions() {
+  initRecurring();
+  var subs = state.subscriptions || [];
+  var migrated = 0;
+  subs.forEach(function(s) {
+    if (s.status !== 'keep' || !s.amt) return;
+    // Check if a recurring rule with same name already exists
+    var exists = state.recurring.some(function(r){ return r.name === s.name; });
+    if (exists) return;
+    state.recurring.push({
+      name: s.name,
+      billType: 'fixed',
+      amount: s.amt,
+      variance: 0,
+      category: 'Subscriptions',
+      schedule: 'monthly',
+      day: 1,
+      start: today(),
+      end: '',
+      notes: s.notes || '',
+      active: true
+    });
+    migrated++;
+  });
+  // Clear subscriptions after migration
+  state.subscriptions = [];
+  saveState();
+  showToast(migrated + ' subscriptions migrated to Recurring');
+  nav('recurring');
 }
 
 // ─── BUDGET PLAN ──────────────────────────────────────────────────────────────
@@ -2984,6 +3044,27 @@ function renderAvalanche() {
   if (minDisplay) minDisplay.textContent = fmtInt(totalMin) + '/mo';
   var totalDisplay = document.getElementById('av-total-display');
   if (totalDisplay) totalDisplay.textContent = fmtInt(budget) + '/mo';
+
+  // Free cash hint — show how much is available
+  var hintEl = document.getElementById('av-free-cash-hint');
+  if (hintEl) {
+    var now = new Date();
+    var income = actualOrExpectedIncome(now.getFullYear(), now.getMonth());
+    var needsMonthly = state.needs.reduce(function(s,n){ return s + n.amt; }, 0);
+    var wantsMonthly = state.wants.reduce(function(s,w){ return s + w.amt; }, 0);
+    var freeCash = income - needsMonthly - wantsMonthly;
+    var afterDebt = freeCash - extra;
+    hintEl.innerHTML = 'Your free cash: <span style="color:var(--teal2);font-weight:600">' + fmtInt(freeCash) + '/mo</span> (income ' + fmtInt(income) + ' − needs ' + fmtInt(needsMonthly) + ' − wants ' + fmtInt(wantsMonthly) + ')' +
+      (extra > 0 ? ' · After debt extra: <span style="color:' + (afterDebt >= 0 ? 'var(--teal2)' : 'var(--red2)') + ';font-weight:600">' + fmtInt(afterDebt) + '</span> left' : '');
+    // Set default extra to free cash if user hasn't touched it
+    var extraInput2 = document.getElementById('av-extra');
+    if (extraInput2 && extraInput2.dataset.touched !== 'yes' && freeCash > 0) {
+      extraInput2.value = Math.max(0, Math.round(freeCash));
+      extra = Math.round(freeCash);
+      budget = totalMin + extra;
+      if (totalDisplay) totalDisplay.textContent = fmtInt(budget) + '/mo';
+    }
+  }
 
   // Run both simulations
   var avalanche = runAvalanche(debts, budget);
@@ -6984,7 +7065,6 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('debts')"><span class="nav-icon">◎</span> Debts</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('needs')"><span class="nav-icon">⬡</span> Needs Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('wants')"><span class="nav-icon">◉</span> Wants Budget</div>
-      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('budget')"><span class="nav-icon">≡</span> Budget Plan</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('roadmap')"><span class="nav-icon">→</span> Avalanche</div>
       <div style="height:1px;background:var(--border);margin:.5rem 0"></div>
