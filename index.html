@@ -47,7 +47,7 @@ body{
 }
 
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
-.app{display:flex;min-height:100vh}
+.app{min-height:100vh}
 
 /* SIDEBAR */
 .sidebar{
@@ -59,9 +59,11 @@ body{
   display:flex;
   flex-direction:column;
   padding:1.5rem 0;
-  position:sticky;
+  position:fixed;
   top:0;
+  left:0;
   height:100vh;
+  z-index:40;
 }
 .sidebar-logo{
   padding:0 1.25rem 1.5rem;
@@ -101,7 +103,7 @@ body{
 }
 
 /* MAIN */
-.main{flex:1;min-width:0;overflow-y:auto;padding:2rem}
+.main{flex:1;min-width:0;overflow-y:auto;padding:2rem;margin-left:220px}
 .page{display:none}
 .page.active{display:block}
 
@@ -1736,6 +1738,10 @@ function nav(page) {
     }
   });
   currentPage = page;
+  // Scroll main back to top on every navigation
+  var mainEl = document.querySelector('main');
+  if (mainEl) mainEl.scrollTop = 0;
+  window.scrollTo(0, 0);
   renderPage(page);
 }
 
