@@ -451,6 +451,8 @@ tbody td.muted { color:var(--muted)!important; }
 .alert-item.warn     { border-left:3px solid var(--amber2) }
 .alert-item.info     { border-left:3px solid var(--teal2) }
 .alert-item.success  { border-left:3px solid var(--teal) }
+.alert-item[onclick] { cursor:pointer;transition:background .15s }
+.alert-item[onclick]:hover { background:var(--card2) }
 .alert-icon { font-size:18px;flex-shrink:0;margin-top:1px }
 .alert-title { font-size:13px;font-weight:600;color:var(--white);margin-bottom:2px }
 .alert-body { font-size:12px;color:var(--muted) }
@@ -2282,9 +2284,10 @@ function renderDashTx(y, m) {
   }
 
   tbody.innerHTML = display.map(function(t) {
-    return '<tr>' +
+    var pendBadge = t.pending ? '<span class="badge badge-warn" style="margin-left:4px;font-size:9px">PENDING</span>' : '';
+    return '<tr style="' + (t.pending ? 'opacity:.7' : '') + '">' +
       '<td class="muted">' + t.date + '</td>' +
-      '<td>' + t.description + '</td>' +
+      '<td>' + t.description + pendBadge + '</td>' +
       '<td><span class="badge badge-muted">' + (t.category||'Uncategorized') + '</span></td>' +
       '<td class="r" style="color:' + (t.type==='income'?'var(--teal2)':'var(--white)') + '">' +
         (t.type==='income'?'+':'-') + fmt(t.amount) +
@@ -2552,7 +2555,17 @@ function renderTxPage() {
   if (txs.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">No transactions found</td></tr>';
   } else {
-    tbody.innerHTML = txs.map(t => '<tr><td class="muted">' + t.date + '</td><td>' + t.description + '</td><td><span class="badge badge-muted">' + (t.category||'Uncategorized') + '</span></td><td class="r" style="color:' + (t.type==='income'?'var(--teal2)':'var(--white)') + '">' + (t.type==='income'?'+':'-') + fmt(t.amount) + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditTx(' + t.id + ')">Edit</button></td></tr>').join('');
+    tbody.innerHTML = txs.map(function(t) {
+      var pendBadge = t.pending ? '<span class="badge badge-warn" style="margin-left:4px;font-size:9px">PENDING</span>' : '';
+      var acctBadge = t.account === 'cc' ? '<span class="badge badge-muted" style="margin-left:4px;font-size:9px">CC</span>' : '';
+      return '<tr style="' + (t.pending ? 'opacity:.7' : '') + '">' +
+        '<td class="muted">' + t.date + '</td>' +
+        '<td>' + t.description + pendBadge + acctBadge + '</td>' +
+        '<td><span class="badge badge-muted">' + (t.category||'Uncategorized') + '</span></td>' +
+        '<td class="r" style="color:' + (t.type==='income'?'var(--teal2)':'var(--white)') + '">' + (t.type==='income'?'+':'-') + fmt(t.amount) + '</td>' +
+        '<td><button class="btn btn-ghost btn-sm" onclick="openEditTx(' + t.id + ')">Edit</button></td>' +
+      '</tr>';
+    }).join('');
   }
 }
 
@@ -3476,24 +3489,50 @@ function parsePNC(text) {
     var cols = parseCSVLine(lines[i]);
     if (cols.length < 3) continue;
     var dateRaw = cols[0] || '', desc = cols[1] || '', amtRaw = cols[2] || '';
-    if (dateRaw.toUpperCase().includes('PENDING')) continue;
-    // Parse date
+
+    // Handle PENDING dates — extract the date, mark as pending
+    var isPending = dateRaw.toUpperCase().includes('PENDING');
     var date = '';
     var dm = dateRaw.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (dm) date = dm[1] + '-' + dm[2] + '-' + dm[3];
     else { var dm2 = dateRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/); if (dm2) date = dm2[3] + '-' + dm2[1] + '-' + dm2[2]; }
+    // If pending with no parseable date, use today
+    if (!date && isPending) date = today();
     if (!date) continue;
-    var isNeg = amtRaw.includes('-');
+
+    var isNeg = amtRaw.includes('-') || amtRaw.includes('(');
     var amt = parseFloat(amtRaw.replace(/[^0-9.]/g, ''));
     if (isNaN(amt) || amt === 0) continue;
     var dUp = desc.toUpperCase();
-    // Skip internal moves
-    if (dUp.includes('MOBILE PAYMENT TO') || dUp.includes('MEAFCU SV WEBXFR TRANSFER') || dUp.includes('ONLINE TRANSFER FROM') || dUp.includes('INTEREST PAYMENT') || dUp.includes('ATM TRANSACTION FEE REIMBURSEMENT') || dUp.includes('ATM SURCHARGE REIMB')) continue;
-    // Skip large non-payroll deposits (windfalls)
-    if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS')) continue;
     var type = isNeg ? 'expense' : 'income';
     var cat = resolveCategory(desc, amt);
-    results.push({ date, description: desc.replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type, account: 'checking', skip: false });
+
+    // Flag rows that LOOK like internal moves — pre-skip but user can override
+    var autoSkip = false;
+    var skipReason = '';
+    if (dUp.includes('MOBILE PAYMENT TO')) { autoSkip = true; skipReason = 'CC payment / transfer'; }
+    else if (dUp.includes('MEAFCU SV WEBXFR TRANSFER')) { autoSkip = true; skipReason = 'Internal transfer'; }
+    else if (dUp.includes('ONLINE TRANSFER FROM')) { autoSkip = true; skipReason = 'Internal transfer'; }
+    else if (dUp.includes('ATM TRANSACTION FEE REIMBURSEMENT') || dUp.includes('ATM SURCHARGE REIMB')) { autoSkip = true; skipReason = 'Fee reimbursement'; }
+    else if (dUp.includes('INTEREST PAYMENT') && amt < 5) { autoSkip = true; skipReason = 'Interest (tiny)'; }
+
+    // Large non-payroll deposits — flag but don't skip (user decides)
+    if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS')) {
+      skipReason = 'Large deposit — verify';
+      // Don't auto-skip, just flag it
+    }
+
+    results.push({
+      date: date,
+      description: desc.replace(/\s+/g,' ').slice(0,80),
+      category: cat,
+      amount: amt,
+      type: type,
+      account: 'checking',
+      pending: isPending,
+      skip: autoSkip,
+      skipReason: skipReason
+    });
   }
   return results;
 }
@@ -3621,30 +3660,47 @@ function catOptions(selected) {
 }
 
 function isDuplicate(row) {
-  return state.transactions.some(t =>
-    t.date === row.date &&
-    t.type === row.type &&
-    Math.abs(parseFloat(t.amount) - row.amount) < 0.01 &&
-    t.description.replace(/\s+/g,' ').slice(0,25) === row.description.replace(/\s+/g,' ').slice(0,25)
-  );
+  return state.transactions.some(function(t) {
+    // A real transaction that matches a pending one is NOT a dupe — it's a replacement
+    if (!row.pending && t.pending) return false;
+    return t.date === row.date &&
+      t.type === row.type &&
+      Math.abs(parseFloat(t.amount) - row.amount) < 0.01 &&
+      t.description.replace(/\s+/g,' ').slice(0,25) === row.description.replace(/\s+/g,' ').slice(0,25);
+  });
 }
 
 function showPreview(rows) {
-  // Mark dupes
-  rows.forEach(r => { r.isDupe = isDuplicate(r); r.skip = r.isDupe; });
+  // Mark dupes — but don't override parser's pre-skip flags
+  rows.forEach(r => {
+    r.isDupe = isDuplicate(r);
+    // If parser already flagged it, keep that skip. Otherwise, skip dupes.
+    if (r.isDupe && !r.skip) r.skip = true;
+  });
 
   var dupeCount = rows.filter(r => r.isDupe).length;
+  var pendingCount = rows.filter(r => r.pending).length;
+  var skipCount = rows.filter(r => r.skip && !r.isDupe).length;
   document.getElementById('preview-title').textContent = rows.length + ' transactions found';
   document.getElementById('preview-stats').textContent =
     rows.filter(r => r.type==='expense').length + ' expenses · ' +
     rows.filter(r => r.type==='income').length + ' income' +
-    (dupeCount ? ' · ' + dupeCount + ' duplicates auto-skipped' : '');
+    (pendingCount ? ' · ' + pendingCount + ' pending' : '') +
+    (dupeCount ? ' · ' + dupeCount + ' duplicates' : '') +
+    (skipCount ? ' · ' + skipCount + ' flagged' : '');
 
   var tbody = document.getElementById('preview-rows');
-  tbody.innerHTML = rows.map((r, i) =>
-    '<tr id="prow-' + i + '" style="' + (r.isDupe ? 'opacity:.4' : '') + ';border-bottom:1px solid var(--border)">' +
+  tbody.innerHTML = rows.map((r, i) => {
+    var opacity = r.skip ? 'opacity:.4' : '';
+    var badges = '';
+    if (r.pending) badges += '<span class="badge badge-warn" style="margin-left:4px;font-size:9px">PENDING</span>';
+    if (r.isDupe) badges += '<span class="badge badge-muted" style="margin-left:4px;font-size:9px">DUPE</span>';
+    if (r.skipReason && !r.isDupe) badges += '<span class="badge badge-warn" style="margin-left:4px;font-size:9px">' + r.skipReason + '</span>';
+    var skipTitle = r.isDupe ? 'Duplicate' : r.skipReason ? r.skipReason : 'Skip this transaction';
+
+    return '<tr id="prow-' + i + '" style="' + opacity + ';border-bottom:1px solid var(--border)">' +
     '<td style="padding:6px 10px;white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + r.date + '</td>' +
-    '<td style="padding:6px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--white)" title="' + r.description + '">' + r.description + '</td>' +
+    '<td style="padding:6px 10px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--white)" title="' + r.description + '">' + r.description + badges + '</td>' +
     '<td style="padding:6px 10px">' +
       '<select class="form-input" style="padding:3px 6px;font-size:11px;width:auto;cursor:pointer" onchange="overrideCat(' + i + ',this.value)">' +
       catOptions(r.category) +
@@ -3654,10 +3710,10 @@ function showPreview(rows) {
       (r.type==='income'?'+':'-') + fmt(r.amount) +
     '</td>' +
     '<td style="padding:6px 10px;text-align:center">' +
-      '<input type="checkbox" ' + (r.skip?'checked':'') + ' onchange="toggleSkip(' + i + ',this.checked)" style="cursor:pointer" title="' + (r.isDupe?'Duplicate — auto-skipped':'Skip this transaction') + '">' +
+      '<input type="checkbox" ' + (r.skip?'checked':'') + ' onchange="toggleSkip(' + i + ',this.checked)" style="cursor:pointer" title="' + skipTitle + '">' +
     '</td>' +
-    '</tr>'
-  ).join('');
+    '</tr>';
+  }).join('');
 
   document.getElementById('import-step-1').style.display = 'none';
   document.getElementById('import-step-2').style.display = 'block';
@@ -3746,7 +3802,34 @@ function confirmImport() {
   var toImport = pendingImport.filter(r => !r.skip);
   if (toImport.length === 0) { showToast('Nothing to import'); return; }
 
+  var replaced = 0;
+  var added = 0;
+
   toImport.forEach(row => {
+    // If this is a real (non-pending) transaction, check if it replaces a pending one
+    if (!row.pending) {
+      var pendingIdx = state.transactions.findIndex(function(t) {
+        return t.pending &&
+          Math.abs(parseFloat(t.amount) - row.amount) < 0.01 &&
+          t.description.slice(0, 20).toUpperCase() === row.description.slice(0, 20).toUpperCase();
+      });
+      if (pendingIdx > -1) {
+        // Replace the pending transaction with the real one
+        state.transactions[pendingIdx] = {
+          id: state.transactions[pendingIdx].id,
+          date: row.date,
+          description: row.description,
+          category: row.category || state.transactions[pendingIdx].category,
+          amount: row.amount,
+          type: row.type,
+          account: row.account || 'checking',
+          pending: false
+        };
+        replaced++;
+        return;
+      }
+    }
+
     state.transactions.push({
       id: Date.now() + Math.random(),
       date: row.date,
@@ -3754,14 +3837,18 @@ function confirmImport() {
       category: row.category,
       amount: row.amount,
       type: row.type,
-      account: row.account || 'checking'
+      account: row.account || 'checking',
+      pending: row.pending || false
     });
+    added++;
   });
 
   saveState();
   closeModal('modal-import');
   resetImport();
-  showToast(toImport.length + ' transactions imported');
+  var msg = added + ' imported';
+  if (replaced > 0) msg += ', ' + replaced + ' pending → confirmed';
+  showToast(msg);
   renderPage(currentPage);
 }
 
@@ -4782,26 +4869,33 @@ function renderAlerts() {
     var dStr = dateOffset(i);
     var bills = getRecurringForDate(dStr).filter(function(b){ return b.type !== 'income'; });
     bills.forEach(function(b) {
-      upcoming.push({ icon:'📅', title: (b.desc||b.name||'Bill') + ' due ' + dateFmt(dStr), body: fmtInt(Math.abs(b.amount)) + ' — ' + i + ' day' + (i>1?'s':'') + ' away', cls:'info' });
+      upcoming.push({
+        icon:'📅',
+        title: (b.desc||b.name||'Bill') + ' due ' + dateFmt(dStr),
+        body: fmtInt(Math.abs(b.amount)) + ' — ' + i + ' day' + (i>1?'s':'') + ' away',
+        cls:'info',
+        ruleIdx: b.ruleIdx
+      });
     });
   }
 
   // 3. CC payoff milestone
   var cc = (state.debts||[]).find(function(d){ return d.type === 'credit_card'; });
   if (cc && cc.balance > 0 && cc.payment > 0) {
+    var ccIdx = state.debts.indexOf(cc);
     var months = monthsToPayoff(cc.balance, cc.rate||24, cc.payment);
     if (months <= 12) {
-      milestones.push({ icon:'🎯', title: 'CC payoff in sight', body: cc.name + ' paid off in ~' + months + ' month' + (months>1?'s':'') + ' at current pace', cls:'success' });
+      milestones.push({ icon:'🎯', title: 'CC payoff in sight', body: cc.name + ' paid off in ~' + months + ' month' + (months>1?'s':'') + ' at current pace', cls:'success', onclick: "nav('debts');setTimeout(function(){openEditDebt(" + ccIdx + ")},150)" });
     }
   }
 
   // 4. Goals close to completion
-  (state.goals||[]).forEach(function(g) {
+  (state.goals||[]).forEach(function(g, gi) {
     var pct = g.target > 0 ? g.saved/g.target : 0;
     if (pct >= 1) {
-      milestones.push({ icon:'🏆', title: g.emoji + ' Goal reached: ' + g.name, body: 'You hit your ' + fmtInt(g.target) + ' target. Time to set a new one.', cls:'success' });
+      milestones.push({ icon:'🏆', title: g.emoji + ' Goal reached: ' + g.name, body: 'You hit your ' + fmtInt(g.target) + ' target. Time to set a new one.', cls:'success', onclick: "openEditGoal(" + gi + ")" });
     } else if (pct >= 0.8) {
-      milestones.push({ icon:'💪', title: g.emoji + ' Almost there: ' + g.name, body: Math.round(pct*100) + '% complete — ' + fmtInt(g.target - g.saved) + ' to go', cls:'info' });
+      milestones.push({ icon:'💪', title: g.emoji + ' Almost there: ' + g.name, body: Math.round(pct*100) + '% complete — ' + fmtInt(g.target - g.saved) + ' to go', cls:'info', onclick: "openEditGoal(" + gi + ")" });
     }
   });
 
@@ -4826,14 +4920,13 @@ function renderAlerts() {
     urgent.push({ icon:'💸', title: 'Checking balance low', body: 'Computed balance $' + Math.round(dbdBal.current).toLocaleString() + ' — below danger threshold', cls:'urgent' });
   }
 
-  // Summary cards
-  var alertCount = urgent.length + upcoming.length;
+  // Summary cards — "All clear" only cares about urgent, not upcoming
   var cards = document.getElementById('alert-cards');
   if (cards) cards.innerHTML = [
     { label: 'Urgent',    val: urgent.length,     cls: urgent.length > 0 ? 'bad' : 'good' },
     { label: 'Upcoming',  val: upcoming.length,   cls: upcoming.length > 0 ? 'warn' : 'good' },
     { label: 'Milestones',val: milestones.length, cls: milestones.length > 0 ? 'good' : 'neutral' },
-    { label: 'All clear?', val: alertCount === 0 ? 'Yes ✓' : 'No', cls: alertCount === 0 ? 'good' : 'neutral' },
+    { label: 'All clear?', val: urgent.length === 0 ? 'Yes ✓' : 'No', cls: urgent.length === 0 ? 'good' : 'bad' },
   ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div></div>'; }).join('');
 
   function renderAlertList(items, elId) {
@@ -4843,7 +4936,20 @@ function renderAlerts() {
       el.innerHTML = '<div class="alert-item info"><div class="alert-icon">✓</div><div><div class="alert-title">All clear</div><div class="alert-body">Nothing here right now</div></div></div>';
     } else {
       el.innerHTML = items.map(function(a){
-        return '<div class="alert-item ' + a.cls + '"><div class="alert-icon">' + a.icon + '</div><div><div class="alert-title">' + a.title + '</div><div class="alert-body">' + a.body + '</div></div></div>';
+        var clickAttr = '';
+        if (a.onclick) {
+          clickAttr = ' onclick="' + a.onclick + '" style="cursor:pointer" title="Click to edit"';
+        } else if (a.ruleIdx !== undefined) {
+          clickAttr = ' onclick="nav(\'recurring\');setTimeout(function(){openEditRecurring(' + a.ruleIdx + ')},150)" style="cursor:pointer" title="Click to edit rule"';
+        }
+        return '<div class="alert-item ' + a.cls + '"' + clickAttr + '>' +
+          '<div class="alert-icon">' + a.icon + '</div>' +
+          '<div style="flex:1">' +
+            '<div class="alert-title">' + a.title + '</div>' +
+            '<div class="alert-body">' + a.body + '</div>' +
+          '</div>' +
+          (clickAttr ? '<div style="color:var(--teal2);font-size:11px;flex-shrink:0;align-self:center">edit →</div>' : '') +
+        '</div>';
       }).join('');
     }
   }
