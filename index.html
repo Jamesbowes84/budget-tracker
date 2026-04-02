@@ -39,6 +39,14 @@
 html{scroll-behavior:smooth}
 
 
+body {
+  font-family: var(--sans);
+  background: var(--navy);
+  color: var(--white);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
 html, body { height:100%; margin:0; overflow:hidden; }
 .app { display:flex; height:100%; }
@@ -1737,14 +1745,15 @@ function nav(page) {
   });
   currentPage = page;
   renderPage(page);
-  // Scroll main back to top AFTER rendering - use timeout to ensure DOM is settled
+  // Force scroll to top - use both immediate and rAF to handle all browsers
   var mainEl = document.querySelector('main');
   if (mainEl) mainEl.scrollTop = 0;
-  window.scrollTo(0, 0);
-  setTimeout(function() {
+  requestAnimationFrame(function() {
     if (mainEl) mainEl.scrollTop = 0;
-    window.scrollTo(0, 0);
-  }, 50);
+    // Also scroll the active page into view from top
+    var activeEl = document.getElementById('page-' + page);
+    if (activeEl) activeEl.scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
 }
 
 function renderPage(page) {
