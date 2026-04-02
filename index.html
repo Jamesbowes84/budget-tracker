@@ -892,7 +892,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
           <table>
             <thead><tr>
               <th>#</th><th>Debt</th><th class="r">Balance</th>
-              <th class="r">Rate</th><th class="r">Min payment</th>
+              <th class="r">Rate</th><th class="r">Min</th><th class="r">Planned</th><th class="r">Extra</th>
               <th class="r">Payoff est.</th><th class="r">Total interest</th>
             </tr></thead>
             <tbody id="debt-avalanche"></tbody>
@@ -1342,8 +1342,13 @@ select.form-input option{background:var(--navy2);color:var(--white)}
         <input class="form-input" id="debt-rate" type="number" step="0.01" placeholder="6.5">
       </div>
       <div class="form-group">
-        <label class="form-label">Monthly Payment ($)</label>
+        <label class="form-label">Min Payment ($)</label>
+        <input class="form-input" id="debt-min-payment" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Planned Payment ($)</label>
         <input class="form-input" id="debt-payment" type="number" step="0.01" placeholder="0.00">
+        <div style="font-size:10px;color:var(--muted);margin-top:3px">What you actually pay/mo</div>
       </div>
     </div>
     <div class="form-row">
@@ -5346,6 +5351,8 @@ function renderDebts() {
   var debts = state.debts;
   var totalBalance = debts.reduce(function(s,d){ return s + (d.balance||0); }, 0);
   var totalPayment = debts.reduce(function(s,d){ return s + (d.payment||0); }, 0);
+  var totalMin     = debts.reduce(function(s,d){ return s + (d.minPayment||d.payment||0); }, 0);
+  var totalExtra   = totalPayment - totalMin;
   var totalInt     = debts.reduce(function(s,d){ return s + totalInterest(d.balance||0, d.rate||0, d.payment||0); }, 0);
   var highestRate  = debts.reduce(function(m,d){ return Math.max(m, d.rate||0); }, 0);
 
@@ -5353,11 +5360,11 @@ function renderDebts() {
   var cards = document.getElementById("debt-summary-cards");
   if (cards) cards.innerHTML = [
     { label: "Total debt", val: fmtInt(totalBalance), cls: "bad" },
-    { label: "Monthly payments", val: fmtInt(totalPayment), cls: "neutral" },
+    { label: "Planned payments", val: fmtInt(totalPayment), note: totalExtra > 0 ? fmtInt(totalMin) + ' min + ' + fmtInt(totalExtra) + ' extra' : '', cls: "neutral" },
     { label: "Est. total interest", val: fmtInt(totalInt), cls: totalInt > 0 ? "bad" : "neutral" },
-    { label: "Highest rate", val: highestRate > 0 ? highestRate.toFixed(1) + "%" : "—", cls: highestRate > 15 ? "bad" : highestRate > 8 ? "warn" : "good" },
+    { label: "Highest rate", val: highestRate > 0 ? highestRate.toFixed(1) + "%" : "\u2014", cls: highestRate > 15 ? "bad" : highestRate > 8 ? "warn" : "good" },
   ].map(function(c){
-    return "<div class='stat-card " + c.cls + "'><div class='stat-label'>" + c.label + "</div><div class='stat-val'>" + c.val + "</div></div>";
+    return "<div class='stat-card " + c.cls + "'><div class='stat-label'>" + c.label + "</div><div class='stat-val'>" + c.val + "</div>" + (c.note ? "<div class='stat-note'>" + c.note + "</div>" : "") + "</div>";
   }).join("");
 
   // Debt cards
@@ -5382,10 +5389,11 @@ function renderDebts() {
             "</div>" +
             "<button class='btn btn-ghost btn-sm' onclick='openEditDebt(" + i + ")'>Edit</button>" +
           "</div>" +
-          "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px'>" +
+          "<div style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px'>" +
             "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Balance</div><div style='font-size:16px;font-weight:700;font-family:var(--mono);color:#E74C3C'>" + fmtInt(d.balance||0) + "</div></div>" +
-            "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Rate</div><div style='font-size:16px;font-weight:700;font-family:var(--mono)'>" + (d.rate > 0 ? d.rate.toFixed(1) + "%" : "—") + "</div></div>" +
-            "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Payment</div><div style='font-size:16px;font-weight:700;font-family:var(--mono)'>" + fmtInt(d.payment||0) + "/mo</div></div>" +
+            "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Rate</div><div style='font-size:16px;font-weight:700;font-family:var(--mono)'>" + (d.rate > 0 ? d.rate.toFixed(1) + "%" : "\u2014") + "</div></div>" +
+            "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Min</div><div style='font-size:16px;font-weight:700;font-family:var(--mono);color:var(--muted)'>" + fmtInt(d.minPayment||d.payment||0) + "</div></div>" +
+            "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Planned</div><div style='font-size:16px;font-weight:700;font-family:var(--mono)'>" + fmtInt(d.payment||0) + "/mo</div>" + ((d.payment||0) > (d.minPayment||0) && (d.minPayment||0) > 0 ? "<div style='font-size:10px;color:var(--teal2)'>+" + fmtInt((d.payment||0)-(d.minPayment||0)) + " extra</div>" : "") + "</div>" +
             "<div><div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px'>Payoff</div><div style='font-size:14px;font-weight:600;color:#0BB589'>" + payoffDate(months) + "</div></div>" +
           "</div>" +
           (d.original > 0 ? "<div style='margin-bottom:4px'>" +
@@ -5405,28 +5413,38 @@ function renderDebts() {
 
   // Avalanche table
   var avalanche = debts.slice().sort(function(a,b){ return (b.rate||0)-(a.rate||0); });
+  var totalMin = debts.reduce(function(s,d){ return s + (d.minPayment||0); }, 0);
+  var totalExtra = totalPayment - totalMin;
   var tbody = document.getElementById("debt-avalanche");
   if (tbody) {
     tbody.innerHTML = avalanche.map(function(d, i) {
-      var months = monthsToPayoff(d.balance||0, d.rate||0, d.payment||0);
-      var interest = totalInterest(d.balance||0, d.rate||0, d.payment||0);
+      var planned = d.payment || 0;
+      var min = d.minPayment || planned;
+      var extra = Math.max(0, planned - min);
+      var months = monthsToPayoff(d.balance||0, d.rate||0, planned);
+      var interest = totalInterest(d.balance||0, d.rate||0, planned);
+      var intColor = interest > 1000 ? '#E74C3C' : 'var(--muted)';
       return "<tr>" +
         "<td style='color:var(--muted);font-weight:700'>" + (i+1) + "</td>" +
         "<td><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:" + debtTypeColor(d.type) + ";margin-right:6px'></span>" + d.name + "</td>" +
         "<td class='r' style='color:#E74C3C;font-family:var(--mono)'>" + fmtInt(d.balance||0) + "</td>" +
-        "<td class='r' style='font-family:var(--mono)'>" + (d.rate > 0 ? d.rate.toFixed(1) + "%" : "—") + "</td>" +
-        "<td class='r' style='font-family:var(--mono)'>" + fmtInt(d.payment||0) + "</td>" +
+        "<td class='r' style='font-family:var(--mono)'>" + (d.rate > 0 ? d.rate.toFixed(1) + "%" : "\u2014") + "</td>" +
+        "<td class='r' style='font-family:var(--mono);color:var(--muted)'>" + fmtInt(min) + "</td>" +
+        "<td class='r' style='font-family:var(--mono)'>" + fmtInt(planned) + "</td>" +
+        "<td class='r' style='font-family:var(--mono);color:" + (extra > 0 ? 'var(--teal2)' : 'var(--muted)') + "'>" + (extra > 0 ? '+' + fmtInt(extra) : '\u2014') + "</td>" +
         "<td class='r' style='color:#0BB589'>" + payoffDate(months) + "</td>" +
-        "<td class='r' style='color:' + (interest>1000?'#E74C3C':'var(--muted)') + ';font-family:var(--mono)'>" + (interest > 0 ? fmtInt(interest) : "—") + "</td>" +
+        "<td class='r' style='color:" + intColor + ";font-family:var(--mono)'>" + (interest > 0 ? fmtInt(interest) : "\u2014") + "</td>" +
       "</tr>";
     }).join("") +
     "<tr style='font-weight:600;border-top:1px solid rgba(255,255,255,.08)'>" +
       "<td colspan='2'>Total</td>" +
       "<td class='r' style='color:#E74C3C;font-family:var(--mono)'>" + fmtInt(totalBalance) + "</td>" +
       "<td></td>" +
+      "<td class='r' style='font-family:var(--mono);color:var(--muted)'>" + fmtInt(totalMin) + "</td>" +
       "<td class='r' style='font-family:var(--mono)'>" + fmtInt(totalPayment) + "</td>" +
+      "<td class='r' style='font-family:var(--mono);color:var(--teal2)'>" + (totalExtra > 0 ? '+' + fmtInt(totalExtra) : '\u2014') + "</td>" +
       "<td></td>" +
-      "<td class='r' style='font-family:var(--mono)'>" + (totalInt > 0 ? fmtInt(totalInt) : "—") + "</td>" +
+      "<td class='r' style='font-family:var(--mono)'>" + (totalInt > 0 ? fmtInt(totalInt) : "\u2014") + "</td>" +
     "</tr>";
   }
 
@@ -5488,6 +5506,7 @@ function openAddDebt() {
   document.getElementById("debt-type").value = "loan";
   document.getElementById("debt-balance").value = "";
   document.getElementById("debt-rate").value = "";
+  document.getElementById("debt-min-payment").value = "";
   document.getElementById("debt-payment").value = "";
   document.getElementById("debt-original").value = "";
   document.getElementById("debt-notes").value = "";
@@ -5505,6 +5524,7 @@ function openEditDebt(idx) {
   document.getElementById("debt-type").value = d.type || "loan";
   document.getElementById("debt-balance").value = d.balance || "";
   document.getElementById("debt-rate").value = d.rate || "";
+  document.getElementById("debt-min-payment").value = d.minPayment || "";
   document.getElementById("debt-payment").value = d.payment || "";
   document.getElementById("debt-original").value = d.original || "";
   document.getElementById("debt-notes").value = d.notes || "";
@@ -5519,14 +5539,17 @@ function saveDebt() {
   var type    = document.getElementById("debt-type").value;
   var balance = parseFloat(document.getElementById("debt-balance").value) || 0;
   var rate    = parseFloat(document.getElementById("debt-rate").value) || 0;
+  var minPayment = parseFloat(document.getElementById("debt-min-payment").value) || 0;
   var payment = parseFloat(document.getElementById("debt-payment").value) || 0;
   var original= parseFloat(document.getElementById("debt-original").value) || balance;
   var notes   = document.getElementById("debt-notes").value.trim();
   var addNeed = document.getElementById("debt-add-need").value;
 
   if (!name) { showToast("Enter a name"); return; }
+  // Default min to planned if not set
+  if (!minPayment && payment) minPayment = payment;
 
-  var debt = { name: name, type: type, balance: balance, original: original, rate: rate, payment: payment, notes: notes };
+  var debt = { name: name, type: type, balance: balance, original: original, rate: rate, minPayment: minPayment, payment: payment, notes: notes };
 
   if (idx === -1) {
     state.debts.push(debt);
