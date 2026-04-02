@@ -457,6 +457,46 @@ select.form-input option{background:var(--navy2);color:var(--white)}
 .cal-bill[onclick] { cursor:pointer!important }
 .cal-bill[onclick]:hover { filter:brightness(1.3);transform:translateX(1px); }
 
+
+/* ─── CASH FLOW CALENDAR ─────────────────────────────────────────── */
+.dbd-cal-hdr {
+  text-align:center;font-size:10px;font-weight:600;
+  color:var(--muted);padding:5px 2px;
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.dbd-cal-day {
+  background:var(--card);border:1px solid var(--border);
+  border-radius:6px;padding:5px 6px;min-height:72px;
+  cursor:pointer;transition:border-color .15s;
+  position:relative;
+}
+.dbd-cal-day:hover { border-color:var(--steel); }
+.dbd-cal-day.dbd-today { border-color:var(--teal)!important;background:rgba(11,181,137,.07); }
+.dbd-cal-day.dbd-income { background:rgba(11,181,137,.08); }
+.dbd-cal-day.dbd-warn   { background:rgba(240,165,0,.1); }
+.dbd-cal-day.dbd-danger { background:rgba(192,57,43,.12); }
+.dbd-cal-day.dbd-past   { opacity:.5; }
+.dbd-cal-day.dbd-other  { opacity:.25;cursor:default; }
+.dbd-cal-day.dbd-projected { border-style:dashed; }
+.dbd-cal-daynum { font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px; }
+.dbd-today .dbd-cal-daynum { color:var(--teal2); }
+.dbd-cal-balance {
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  margin-bottom:3px;
+}
+.dbd-cal-balance.good   { color:var(--teal2); }
+.dbd-cal-balance.warn   { color:var(--amber2); }
+.dbd-cal-balance.danger { color:var(--red2); }
+.dbd-cal-events { font-size:9px;color:var(--muted);line-height:1.4; }
+.dbd-cal-event-dot {
+  display:inline-block;width:5px;height:5px;border-radius:50%;
+  margin-right:3px;vertical-align:middle;flex-shrink:0;
+}
+.dbd-detail-box {
+  background:var(--card);border:1px solid var(--teal);
+  border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;
+}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 </head>
@@ -840,10 +880,10 @@ select.form-input option{background:var(--navy2);color:var(--white)}
     <!-- DAY BY DAY -->
     <div class="page" id="page-daybyday">
       <div class="page-title">Day by Day</div>
-      <div class="page-sub">Your projected checking balance — 15 days back, 30 days forward</div>
+      <div class="page-sub">Running cash balance — every dollar in and out</div>
 
       <!-- Setup bar -->
-      <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1.25rem">
+      <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1rem">
         <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
           <div class="form-group" style="max-width:200px">
             <label class="form-label">Checking balance ($)</label>
@@ -853,80 +893,65 @@ select.form-input option{background:var(--navy2);color:var(--white)}
           <div style="align-self:flex-end">
             <button class="btn btn-primary btn-sm" onclick="dbdUpdateBalance()">&#10003; Update Balance</button>
           </div>
-          <div class="form-group" style="max-width:120px">
+          <div class="form-group" style="max-width:110px">
             <label class="form-label">Warn below ($)</label>
-            <input class="form-input" id="dbd-warn" type="number" step="1" placeholder="500" oninput="saveDayByDaySettings()">
+            <input class="form-input" id="dbd-warn" type="number" placeholder="500" oninput="saveDayByDaySettings()">
           </div>
-          <div class="form-group" style="max-width:120px">
+          <div class="form-group" style="max-width:110px">
             <label class="form-label">Danger below ($)</label>
-            <input class="form-input" id="dbd-danger" type="number" step="1" placeholder="200" oninput="saveDayByDaySettings()">
+            <input class="form-input" id="dbd-danger" type="number" placeholder="200" oninput="saveDayByDaySettings()">
           </div>
           <div style="align-self:flex-end;margin-left:auto">
-            <div style="display:flex;gap:4px">
-              <button class="btn btn-ghost btn-sm" id="dbd-view-day" onclick="dbdSetView('day')" style="font-size:11px">Day</button>
-              <button class="btn btn-ghost btn-sm" id="dbd-view-week" onclick="dbdSetView('week')" style="font-size:11px">Week</button>
-              <button class="btn btn-ghost btn-sm" id="dbd-view-month" onclick="dbdSetView('month')" style="font-size:11px">Month</button>
-            </div>
+            <button class="btn btn-ghost btn-sm" onclick="dbdSetRange(30)" id="dbd-range-30" style="font-size:11px">30d</button>
+            <button class="btn btn-ghost btn-sm" onclick="dbdSetRange(60)" id="dbd-range-60" style="font-size:11px">60d</button>
+            <button class="btn btn-ghost btn-sm" onclick="dbdSetRange(90)" id="dbd-range-90" style="font-size:11px">90d</button>
           </div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:.75rem;align-items:center">
-          <span style="font-size:11px;color:var(--muted)">Range:</span>
-          <button class="btn btn-ghost btn-sm" id="dbd-range-30" onclick="dbdSetRange(30)" style="font-size:11px">30 days</button>
-          <button class="btn btn-ghost btn-sm" id="dbd-range-60" onclick="dbdSetRange(60)" style="font-size:11px">60 days</button>
-          <button class="btn btn-ghost btn-sm" id="dbd-range-90" onclick="dbdSetRange(90)" style="font-size:11px">90 days</button>
-          <button class="btn btn-ghost btn-sm" onclick="renderDayByDay()" style="font-size:11px;margin-left:auto">&#8635; Refresh</button>
         </div>
       </div>
 
-      <!-- Balance cards -->
-      <div class="cards-grid" id="dbd-cards" style="margin-bottom:1.25rem"></div>
+      <!-- Summary cards -->
+      <div class="cards-grid" id="dbd-cards" style="margin-bottom:1rem"></div>
 
-      <!-- Upcoming one-off items -->
-      <div class="section">
+      <!-- One-off items -->
+      <div class="section" style="margin-bottom:1rem">
         <div class="section-hdr">
-          <div class="section-title">Upcoming one-off expenses</div>
+          <div class="section-title">One-off items</div>
           <button class="btn btn-primary btn-sm" onclick="openAddDayItem()">+ Add</button>
         </div>
-        <div id="dbd-oneoffs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem"></div>
+        <div id="dbd-oneoffs" style="display:flex;flex-wrap:wrap;gap:8px"></div>
       </div>
 
-      <!-- Day by day table -->
-      <div class="section">
-        <div class="section-hdr">
-          <div class="section-title">Cash flow</div>
-          <div style="display:flex;gap:8px">
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)"><div style="width:8px;height:8px;border-radius:2px;background:var(--teal)"></div>Income</div>
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)"><div style="width:8px;height:8px;border-radius:2px;background:var(--red)"></div>Expense</div>
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)"><div style="width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.06)"></div>Projected</div>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr>
-              <th>Date</th>
-              <th>Day</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th class="r">In/Out</th>
-              <th class="r">Balance</th>
-            </tr></thead>
-            <tbody id="dbd-table"></tbody>
-          </table>
-        </div>
+      <!-- Month navigation -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">
+        <button class="month-btn" onclick="dbdPrevMonth()">&#8592; Prev</button>
+        <div class="month-display" id="dbd-month-label" style="font-size:15px;font-weight:600"></div>
+        <button class="month-btn" onclick="dbdNextMonth()">Next &#8594;</button>
+        <span style="font-size:11px;color:var(--muted);margin-left:8px">Click any day for details</span>
       </div>
 
-      <!-- Mini chart -->
+      <!-- Cash flow calendar grid -->
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:1.5rem" id="dbd-cal-grid"></div>
+
+      <!-- Day headers -->
+      <div id="dbd-day-detail" style="display:none"></div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:1rem;font-size:11px;color:var(--muted)">
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:rgba(11,181,137,.3)"></div>Income day</div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:rgba(192,57,43,.25)"></div>Danger (&lt; threshold)</div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:rgba(240,165,0,.2)"></div>Warning</div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;border:1px solid var(--teal)"></div>Today</div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,.04)"></div>Projected</div>
+      </div>
+
+      <!-- Balance chart -->
       <div class="section">
         <div class="section-hdr"><div class="section-title">Balance projection</div></div>
-        <div class="tbl-wrap" style="padding:1.25rem">
-          <canvas id="dbd-chart" height="160"></canvas>
-        </div>
+        <div class="tbl-wrap" style="padding:1.25rem"><canvas id="dbd-chart" height="140"></canvas></div>
       </div>
     </div>
 
-  
-    <!-- NET WORTH -->
-    <div class="page" id="page-networth">
+<div class="page" id="page-networth">
       <div class="page-title">Net Worth</div>
       <div class="page-sub">Assets minus debts — your real financial picture</div>
       <div class="cards-grid" id="nw-cards"></div>
@@ -4668,27 +4693,18 @@ function renderDayByDay() {
 
   var s = dbdSettings();
   var startingBalance = s.balance || 0;
-  var balEl = document.getElementById('dbd-balance');
-  if (balEl && !s.balance) {
-    balEl.style.borderColor = 'var(--amber2)';
-    balEl.placeholder = 'Enter balance first!';
-  } else if (balEl) {
-    balEl.style.borderColor = '';
-    balEl.placeholder = '0.00';
-  }
-  // Prompt user to set balance if not set yet
-  var balEl = document.getElementById('dbd-balance');
-  if (balEl && !s.balance) {
-    balEl.style.borderColor = 'var(--amber2)';
-    balEl.placeholder = 'Enter your balance first!';
-  } else if (balEl) {
-    balEl.style.borderColor = '';
-  }
   var warnThreshold   = s.warnThreshold   !== undefined ? s.warnThreshold   : 500;
   var dangerThreshold = s.dangerThreshold !== undefined ? s.dangerThreshold : 200;
   var todayStr = today();
 
-  // Build full day list: 15 back + dbdRange forward
+  // Balance prompt
+  var balEl = document.getElementById('dbd-balance');
+  if (balEl) {
+    if (!s.balance) { balEl.style.borderColor = 'var(--amber2)'; balEl.placeholder = 'Enter balance first!'; }
+    else { balEl.style.borderColor = ''; balEl.placeholder = '0.00'; }
+  }
+
+  // Build days: 15 back + dbdRange forward
   var allDays = [];
   for (var i = -15; i <= dbdRange; i++) allDays.push(dateOffset(i));
 
@@ -4699,192 +4715,206 @@ function renderDayByDay() {
   var futureDays = allDays.filter(function(d){ return d > todayStr; });
   var futureMin = Infinity, futureMinDate = '';
   futureDays.forEach(function(d) {
-    if ((balances[d] || 0) < futureMin) { futureMin = balances[d]; futureMinDate = d; }
+    if ((balances[d]||0) < futureMin) { futureMin = balances[d]; futureMinDate = d; }
   });
-  var bal30 = balances[allDays[allDays.length - 1]] || 0;
-  var totalBills = futureDays.reduce(function(s,d) {
-    return s + dayEvents[d].filter(function(e){ return e.type==='bill'; }).reduce(function(ss,e){ return ss + Math.abs(e.amount); }, 0);
+  var endBal = balances[allDays[allDays.length-1]] || 0;
+  var totalBills = futureDays.reduce(function(s,d){
+    return s + dayEvents[d].filter(function(e){ return e.type!=='income'; })
+      .reduce(function(ss,e){ return ss+Math.abs(e.amount); }, 0);
   }, 0);
 
   var cards = document.getElementById('dbd-cards');
   if (cards) cards.innerHTML = [
-    { label: 'Current balance',     val: '$' + Math.round(startingBalance).toLocaleString(),        cls: startingBalance < dangerThreshold ? 'bad' : startingBalance < warnThreshold ? 'warn' : 'good' },
-    { label: 'Lowest (' + dbdRange + 'd)', val: futureMin === Infinity ? '—' : '$' + Math.round(futureMin).toLocaleString(), note: futureMinDate ? dateFmt(futureMinDate) : '', cls: futureMin < 0 ? 'bad' : futureMin < dangerThreshold ? 'bad' : futureMin < warnThreshold ? 'warn' : 'good' },
-    { label: 'Balance in ' + dbdRange + 'd', val: '$' + Math.round(bal30).toLocaleString(),          cls: bal30 < 0 ? 'bad' : bal30 < dangerThreshold ? 'bad' : bal30 < warnThreshold ? 'warn' : 'good' },
-    { label: 'Bills due (' + dbdRange + 'd)', val: '$' + Math.round(totalBills).toLocaleString(),     cls: 'neutral' },
-  ].map(function(c) {
-    return '<div class="stat-card ' + c.cls + '"><div class="stat-label">' + c.label + '</div><div class="stat-val">' + c.val + '</div>' + (c.note ? '<div class="stat-note">' + c.note + '</div>' : '') + '</div>';
+    { label:'Current balance',      val:'$'+Math.round(startingBalance).toLocaleString(), cls: startingBalance<dangerThreshold?'bad':startingBalance<warnThreshold?'warn':'good' },
+    { label:'Lowest ('+dbdRange+'d)', val: futureMin===Infinity?'—':'$'+Math.round(futureMin).toLocaleString(), note: futureMinDate?dateFmt(futureMinDate):'', cls: futureMin<0||futureMin<dangerThreshold?'bad':futureMin<warnThreshold?'warn':'good' },
+    { label:'Balance in '+dbdRange+'d', val:'$'+Math.round(endBal).toLocaleString(), cls: endBal<0?'bad':endBal<dangerThreshold?'bad':endBal<warnThreshold?'warn':'good' },
+    { label:'Bills due ('+dbdRange+'d)', val:'$'+Math.round(totalBills).toLocaleString(), cls:'neutral' },
+  ].map(function(c){
+    return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div>'+(c.note?'<div class="stat-note">'+c.note+'</div>':'' )+'</div>';
   }).join('');
 
   // One-off pills
   var oneoffs = document.getElementById('dbd-oneoffs');
   if (oneoffs) {
     if (!state.dayItems || state.dayItems.length === 0) {
-      oneoffs.innerHTML = '<div style="font-size:12px;color:var(--muted)">None — add upcoming items like ski trips, car repairs, tax payments</div>';
+      oneoffs.innerHTML = '<div style="font-size:12px;color:var(--muted)">None yet</div>';
     } else {
-      oneoffs.innerHTML = state.dayItems.map(function(item, i) {
-        var amt = parseFloat(item.amount || 0);
-        var color = item.type === 'income' ? 'var(--teal2)' : 'var(--red2)';
-        return '<div class="dbd-pill" onclick="openEditDayItem(' + i + ')">' +
-          '<span style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (item.type==='income'?'+':'-') + '$' + Math.round(amt) + '</span>' +
-          '<span>' + item.desc + '</span>' +
-          '<span style="font-size:11px;color:var(--muted)">' + dateFmt(item.date) + '</span>' +
+      oneoffs.innerHTML = state.dayItems.map(function(item,i){
+        var color = item.type==='income'?'var(--teal2)':'var(--red2)';
+        return '<div class="dbd-pill" onclick="openEditDayItem('+i+')">' +
+          '<span style="color:'+color+';font-family:var(--mono);font-size:12px">'+(item.type==='income'?'+':'-')+'$'+Math.round(item.amount)+'</span>' +
+          '<span>'+item.desc+'</span><span style="font-size:11px;color:var(--muted)">'+dateFmt(item.date)+'</span>' +
         '</div>';
       }).join('');
     }
   }
 
-  // Render table based on view
-  if (dbdView === 'day')   renderDbdDayView(allDays, dayEvents, balances, todayStr, warnThreshold, dangerThreshold);
-  if (dbdView === 'week')  renderDbdWeekView(allDays, dayEvents, balances, todayStr, warnThreshold, dangerThreshold);
-  if (dbdView === 'month') renderDbdMonthView(allDays, dayEvents, balances, todayStr, warnThreshold, dangerThreshold);
+  // Render calendar for the current dbd month
+  renderDbdCalendar(allDays, dayEvents, balances, todayStr, warnThreshold, dangerThreshold);
 
   // Chart
   renderDbdChart(allDays, balances, todayStr, warnThreshold, dangerThreshold);
 }
 
-// ── DAY VIEW ──────────────────────────────────────────────────────────────────
-function renderDbdDayView(days, dayEvents, balances, todayStr, warn, danger) {
-  var tbody = document.getElementById('dbd-table');
-  if (!tbody) return;
-  var rows = '';
+// Track which month we're viewing in DayByDay
+var dbdCalMonth = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
-  days.forEach(function(d) {
-    var isPast   = d < todayStr;
-    var isToday  = d === todayStr;
-    var isFuture = d > todayStr;
-    var bal = balances[d] || 0;
-    var balClass  = bal < 0 ? 'dbd-balance-danger' : bal < danger ? 'dbd-balance-danger' : bal < warn ? 'dbd-balance-warn' : 'dbd-balance-good';
-    var rowClass  = isToday ? 'dbd-row-today' : isFuture ? 'dbd-row-projected' : 'dbd-row-past';
-    var dangerRow = bal < danger ? ' dbd-row-danger' : bal < warn ? ' dbd-row-warn' : '';
-    var events    = dayEvents[d];
-    var balStr    = '$' + Math.round(bal).toLocaleString();
-    var dayLabel  = isToday ? 'TODAY' : dateToDisplay(d);
+function dbdPrevMonth() {
+  dbdCalMonth.month--;
+  if (dbdCalMonth.month < 0) { dbdCalMonth.month = 11; dbdCalMonth.year--; }
+  var s = dbdSettings();
+  renderDbdCalendar(
+    (function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
+    buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
+    buildBalances((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
+      buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
+      s.balance||0, today()),
+    today(), s.warnThreshold||500, s.dangerThreshold||200
+  );
+}
 
-    if (events.length === 0) {
-      if (isToday) {
-        rows += '<tr class="' + rowClass + dangerRow + '"><td class="muted">' + dateFmt(d) + '</td><td><strong>' + dayLabel + '</strong></td><td class="muted">No activity</td><td></td><td></td><td class="r ' + balClass + '" style="font-family:var(--mono);font-weight:600">' + balStr + '</td></tr>';
-      }
-      return;
-    }
+function dbdNextMonth() {
+  dbdCalMonth.month++;
+  if (dbdCalMonth.month > 11) { dbdCalMonth.month = 0; dbdCalMonth.year++; }
+  var s = dbdSettings();
+  renderDbdCalendar(
+    (function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
+    buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
+    buildBalances((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
+      buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
+      s.balance||0, today()),
+    today(), s.warnThreshold||500, s.dangerThreshold||200
+  );
+}
 
-    events.forEach(function(e, ei) {
-      var isFirst = ei === 0;
-      var amtColor = e.amount > 0 ? 'var(--teal2)' : 'var(--white)';
-      var typeLabel = e.confirmed ? (e.amount > 0 ? 'Income' : 'Actual') : (e.amount > 0 ? 'Projected' : e.type === 'bill' ? 'Bill due' : 'Planned');
-      var typeBadge = e.amount > 0 ? 'badge-good' : e.type === 'bill' ? 'badge-warn' : 'badge-muted';
-      rows += '<tr class="' + rowClass + (isFirst ? dangerRow : '') + '">' +
-        '<td class="muted">' + (isFirst ? dateFmt(d) : '') + '</td>' +
-        '<td>' + (isFirst ? (isToday ? '<strong>' + dayLabel + '</strong>' : dayLabel) : '') + '</td>' +
-        '<td>' + e.desc + (e.category ? ' <span style="font-size:10px;color:var(--muted)">· ' + e.category + '</span>' : '') + '</td>' +
-        '<td><span class="badge ' + typeBadge + '">' + typeLabel + '</span></td>' +
-        '<td class="r" style="font-family:var(--mono);color:' + amtColor + '">' + (e.amount >= 0 ? '+' : '') + '$' + Math.abs(Math.round(e.amount)).toLocaleString() + '</td>' +
-        '<td class="r ' + (isFirst ? balClass : '') + '" style="font-family:var(--mono);' + (isFirst ? 'font-weight:600' : 'color:transparent') + '">' + (isFirst ? balStr : '·') + '</td>' +
-      '</tr>';
-    });
+function renderDbdCalendar(allDays, dayEvents, balances, todayStr, warn, danger) {
+  var y = dbdCalMonth.year, m = dbdCalMonth.month;
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  var lbl = document.getElementById('dbd-month-label');
+  if (lbl) lbl.textContent = MONTHS[m] + ' ' + y;
+
+  var grid = document.getElementById('dbd-cal-grid');
+  if (!grid) return;
+
+  var html = '';
+  // Day headers
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){
+    html += '<div class="dbd-cal-hdr">'+d+'</div>';
   });
 
-  tbody.innerHTML = rows || '<tr><td colspan="6" class="muted" style="text-align:center;padding:2rem">No activity in this range</td></tr>';
+  var firstDay    = new Date(y, m, 1).getDay();
+  var daysInMonth = new Date(y, m+1, 0).getDate();
+  var prevDays    = new Date(y, m, 0).getDate();
+
+  // Prev month filler
+  for (var i = 0; i < firstDay; i++) {
+    html += '<div class="dbd-cal-day dbd-other"><div class="dbd-cal-daynum">'+(prevDays-firstDay+i+1)+'</div></div>';
+  }
+
+  // Current month days
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var isToday  = dateStr === todayStr;
+    var isPast   = dateStr < todayStr;
+    var isFuture = dateStr > todayStr;
+    var inRange  = !!balances[dateStr];
+    var bal      = balances[dateStr] !== undefined ? balances[dateStr] : null;
+    var events   = dayEvents[dateStr] || [];
+
+    var hasIncome = events.some(function(e){ return e.amount > 0; });
+    var hasBills  = events.some(function(e){ return e.amount < 0; });
+    var netDay    = events.reduce(function(s,e){ return s + e.amount; }, 0);
+
+    // Day class
+    var cls = 'dbd-cal-day';
+    if (isToday)              cls += ' dbd-today';
+    else if (isPast)          cls += ' dbd-past';
+    else if (isFuture && inRange) cls += ' dbd-projected';
+    if (hasIncome && !hasBills) cls += ' dbd-income';
+    if (bal !== null && bal < danger) cls += ' dbd-danger';
+    else if (bal !== null && bal < warn) cls += ' dbd-warn';
+
+    // Balance color
+    var balClass = bal === null ? '' : bal < 0 ? 'danger' : bal < danger ? 'danger' : bal < warn ? 'warn' : 'good';
+
+    // Net delta for the day
+    var deltaStr = '';
+    if (netDay > 0) deltaStr = '<span style="color:var(--teal2);font-size:9px">+$'+Math.round(netDay).toLocaleString()+'</span>';
+    else if (netDay < 0) deltaStr = '<span style="color:var(--muted);font-size:9px">-$'+Math.abs(Math.round(netDay)).toLocaleString()+'</span>';
+
+    // Events list (max 2 shown)
+    var evtHtml = events.slice(0,2).map(function(e){
+      var dot = e.amount > 0 ? '#0BB589' : '#E74C3C';
+      return '<div style="display:flex;align-items:center;gap:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        '<span class="dbd-cal-event-dot" style="background:'+dot+'"></span>' +
+        '<span>'+e.desc.slice(0,14)+(e.desc.length>14?'…':'')+'</span></div>';
+    }).join('');
+    if (events.length > 2) evtHtml += '<div style="color:var(--teal2);font-size:9px">+' + (events.length-2) + ' more</div>';
+
+    html += '<div class="'+cls+'" onclick="dbdShowDayDetail(\''+dateStr+'\')">' +
+      '<div class="dbd-cal-daynum">'+(isToday?'<strong>'+d+'</strong>':d)+'</div>' +
+      (bal !== null ? '<div class="dbd-cal-balance '+balClass+'">' + '$'+Math.round(bal).toLocaleString() + '</div>' : '') +
+      (deltaStr ? '<div style="margin-bottom:2px">'+deltaStr+'</div>' : '') +
+      '<div class="dbd-cal-events">'+evtHtml+'</div>' +
+    '</div>';
+  }
+
+  // Fill trailing cells
+  var total = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  for (var i = daysInMonth + firstDay; i < total; i++) {
+    html += '<div class="dbd-cal-day dbd-other"><div class="dbd-cal-daynum">'+(i-daysInMonth-firstDay+1)+'</div></div>';
+  }
+
+  grid.innerHTML = html;
 }
+
+function dbdShowDayDetail(dateStr) {
+  var s = dbdSettings();
+  var allDays = [];
+  for (var i = -15; i <= dbdRange; i++) allDays.push(dateOffset(i));
+  var dayEvents = buildDayEvents(allDays, today());
+  var balances  = buildBalances(allDays, dayEvents, s.balance||0, today());
+
+  var events  = dayEvents[dateStr] || [];
+  var bal     = balances[dateStr];
+  var detailEl = document.getElementById('dbd-day-detail');
+  if (!detailEl) return;
+
+  if (!events.length && bal === undefined) {
+    detailEl.style.display = 'none';
+    return;
+  }
+
+  var rows = events.map(function(e){
+    var color = e.amount > 0 ? 'var(--teal2)' : 'var(--white)';
+    var type  = e.confirmed ? (e.amount>0?'Income':'Actual') : (e.amount>0?'Expected':'Planned');
+    return '<tr><td>'+e.desc+(e.category?'<span style="font-size:10px;color:var(--muted)"> · '+e.category+'</span>':'')+'</td>' +
+      '<td><span class="badge '+(e.amount>0?'badge-good':'badge-muted')+'">'+type+'</span></td>' +
+      '<td class="r" style="font-family:var(--mono);color:'+color+'">'+(e.amount>=0?'+':'')+' $'+Math.abs(Math.round(e.amount)).toLocaleString()+'</td></tr>';
+  }).join('') || '<tr><td colspan="3" class="muted" style="text-align:center">No transactions</td></tr>';
+
+  detailEl.style.display = 'block';
+  detailEl.innerHTML = '<div class="dbd-detail-box">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">' +
+      '<div style="font-size:14px;font-weight:600">'+dateFmt(dateStr) + ' ' + dateToDisplay(dateStr) + '</div>' +
+      (bal !== undefined ? '<div style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+(bal<0?'var(--red2)':bal<(s.dangerThreshold||200)?'var(--red2)':bal<(s.warnThreshold||500)?'var(--amber2)':'var(--teal2)')+'">' +
+        '$'+Math.round(bal).toLocaleString()+'</div>' : '') +
+      '<button onclick="document.getElementById(\'dbd-day-detail\').style.display=\'none\'" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">&#x2715;</button>' +
+    '</div>' +
+    '<table style="width:100%"><thead><tr><th>Description</th><th>Type</th><th class="r">Amount</th></tr></thead>' +
+    '<tbody>'+rows+'</tbody></table>' +
+  '</div>';
+}
+
+// ── DAY VIEW ──────────────────────────────────────────────────────────────────
+
 
 // ── WEEK VIEW ─────────────────────────────────────────────────────────────────
-function renderDbdWeekView(days, dayEvents, balances, todayStr, warn, danger) {
-  var tbody = document.getElementById('dbd-table');
-  if (!tbody) return;
 
-  // Group days into weeks (Mon-Sun)
-  var weeks = [];
-  var currentWeek = null;
-  days.forEach(function(d) {
-    var dow = new Date(d + 'T00:00:00').getDay(); // 0=Sun
-    if (dow === 1 || !currentWeek) { // Monday = start new week
-      if (currentWeek) weeks.push(currentWeek);
-      currentWeek = [];
-    }
-    currentWeek.push(d);
-  });
-  if (currentWeek && currentWeek.length) weeks.push(currentWeek);
-
-  var rows = '<tr style="background:rgba(0,0,0,.2)"><th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--muted)">Week</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">In</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Out</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Net</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Min</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Max</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">End Balance</th></tr>';
-
-  weeks.forEach(function(wk) {
-    var hasPast = wk.some(function(d){ return d <= todayStr; });
-    var isCurrent = wk.some(function(d){ return d === todayStr; });
-    var weekStart = wk[0], weekEnd = wk[wk.length-1];
-    var allEvents = [];
-    wk.forEach(function(d) { allEvents = allEvents.concat(dayEvents[d]); });
-    var totalIn  = allEvents.filter(function(e){ return e.amount > 0; }).reduce(function(s,e){ return s+e.amount; }, 0);
-    var totalOut = allEvents.filter(function(e){ return e.amount < 0; }).reduce(function(s,e){ return s+Math.abs(e.amount); }, 0);
-    var net = totalIn - totalOut;
-    var weekBals = wk.map(function(d){ return balances[d] || 0; });
-    var minBal = Math.min.apply(null, weekBals);
-    var maxBal = Math.max.apply(null, weekBals);
-    var endBal = balances[weekEnd] || 0;
-    var balClass = endBal < 0 ? 'dbd-balance-danger' : endBal < danger ? 'dbd-balance-danger' : endBal < warn ? 'dbd-balance-warn' : 'dbd-balance-good';
-    var rowStyle = isCurrent ? 'background:rgba(11,181,137,.06);font-weight:600' : hasPast ? 'opacity:.6' : '';
-
-    rows += '<tr style="' + rowStyle + '">' +
-      '<td>' + dateFmt(weekStart) + ' – ' + dateFmt(weekEnd) + (isCurrent ? ' <span class="badge badge-good">This week</span>' : '') + '</td>' +
-      '<td class="r" style="color:var(--teal2);font-family:var(--mono)">+$' + Math.round(totalIn).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono)">-$' + Math.round(totalOut).toLocaleString() + '</td>' +
-      '<td class="r" style="color:' + (net>=0?'var(--teal2)':'var(--red2)') + ';font-family:var(--mono)">' + (net>=0?'+':'-') + '$' + Math.abs(Math.round(net)).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono);color:' + (minBal<danger?'var(--red2)':minBal<warn?'var(--amber2)':'var(--muted)') + '">$' + Math.round(minBal).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono);color:var(--muted)">$' + Math.round(maxBal).toLocaleString() + '</td>' +
-      '<td class="r ' + balClass + '" style="font-family:var(--mono);font-weight:600">$' + Math.round(endBal).toLocaleString() + '</td>' +
-    '</tr>';
-  });
-
-  tbody.innerHTML = rows;
-}
 
 // ── MONTH VIEW ────────────────────────────────────────────────────────────────
-function renderDbdMonthView(days, dayEvents, balances, todayStr, warn, danger) {
-  var tbody = document.getElementById('dbd-table');
-  if (!tbody) return;
 
-  // Group by year-month
-  var months = {};
-  var monthOrder = [];
-  days.forEach(function(d) {
-    var key = d.slice(0,7);
-    if (!months[key]) { months[key] = []; monthOrder.push(key); }
-    months[key].push(d);
-  });
-
-  var rows = '<tr style="background:rgba(0,0,0,.2)"><th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--muted)">Month</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">In</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Out</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Net</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Min</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Max</th><th style="padding:8px 14px;text-align:right;font-size:11px;color:var(--muted)">Avg Daily</th></tr>';
-
-  monthOrder.forEach(function(key) {
-    var mdays = months[key];
-    var d = new Date(key + '-01T00:00:00');
-    var mLabel = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getFullYear();
-    var isCurrent = key === todayStr.slice(0,7);
-    var hasPast = mdays.some(function(dd){ return dd < todayStr; });
-
-    var allEvents = [];
-    mdays.forEach(function(dd) { allEvents = allEvents.concat(dayEvents[dd]); });
-    var totalIn  = allEvents.filter(function(e){ return e.amount>0; }).reduce(function(s,e){ return s+e.amount; }, 0);
-    var totalOut = allEvents.filter(function(e){ return e.amount<0; }).reduce(function(s,e){ return s+Math.abs(e.amount); }, 0);
-    var net = totalIn - totalOut;
-    var mBals = mdays.map(function(dd){ return balances[dd]||0; });
-    var minBal = Math.min.apply(null, mBals);
-    var maxBal = Math.max.apply(null, mBals);
-    var avgBal = Math.round(mBals.reduce(function(s,v){ return s+v; },0) / mBals.length);
-    var avgClass = avgBal < danger ? 'dbd-balance-danger' : avgBal < warn ? 'dbd-balance-warn' : 'dbd-balance-good';
-    var rowStyle = isCurrent ? 'background:rgba(11,181,137,.06);font-weight:600' : hasPast ? 'opacity:.6' : '';
-
-    rows += '<tr style="' + rowStyle + '">' +
-      '<td>' + mLabel + (isCurrent ? ' <span class="badge badge-good">This month</span>' : '') + '</td>' +
-      '<td class="r" style="color:var(--teal2);font-family:var(--mono)">+$' + Math.round(totalIn).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono)">-$' + Math.round(totalOut).toLocaleString() + '</td>' +
-      '<td class="r" style="color:' + (net>=0?'var(--teal2)':'var(--red2)') + ';font-family:var(--mono)">' + (net>=0?'+':'-') + '$' + Math.abs(Math.round(net)).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono);color:' + (minBal<danger?'var(--red2)':minBal<warn?'var(--amber2)':'var(--muted)') + '">$' + Math.round(minBal).toLocaleString() + '</td>' +
-      '<td class="r" style="font-family:var(--mono);color:var(--muted)">$' + Math.round(maxBal).toLocaleString() + '</td>' +
-      '<td class="r ' + avgClass + '" style="font-family:var(--mono);font-weight:600">$' + avgBal.toLocaleString() + '</td>' +
-    '</tr>';
-  });
-
-  tbody.innerHTML = rows;
-}
 
 // ── CHART ─────────────────────────────────────────────────────────────────────
 function renderDbdChart(days, balances, todayStr, warn, danger) {
