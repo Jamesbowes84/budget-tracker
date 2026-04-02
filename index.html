@@ -4500,14 +4500,14 @@ function dbdSettings() {
 
 function saveDayByDaySettings() {
   var s = dbdSettings();
-  var warn   = parseFloat(document.getElementById('dbd-warn').value);
-  var danger = parseFloat(document.getElementById('dbd-danger').value);
+  var warnEl   = document.getElementById('dbd-warn');
+  var dangerEl = document.getElementById('dbd-danger');
+  var warn   = warnEl   ? parseFloat(warnEl.value)   : NaN;
+  var danger = dangerEl ? parseFloat(dangerEl.value) : NaN;
   if (!isNaN(warn))   s.warnThreshold   = warn;
   if (!isNaN(danger)) s.dangerThreshold = danger;
   s.view  = dbdView;
   s.range = dbdRange;
-  // Store in state but use localStorage directly to avoid triggering re-render loop
-  state.dbdSettings = s;
   try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
 }
 
@@ -4536,27 +4536,21 @@ function dbdShowTimestamp(ts) {
 
 function dbdSetView(v) {
   dbdView = v;
-  saveDayByDaySettings();
-  // Update button styles
+  // Save to localStorage directly — no saveState to avoid re-render loop
+  try { var s = dbdSettings(); s.view = v; localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
   ['day','week','month'].forEach(function(x) {
     var btn = document.getElementById('dbd-view-' + x);
-    if (btn) {
-      btn.style.background = x === v ? 'var(--teal)' : '';
-      btn.style.color      = x === v ? '#fff' : '';
-    }
+    if (btn) { btn.style.background = x === v ? 'var(--teal)' : ''; btn.style.color = x === v ? '#fff' : ''; }
   });
   renderDayByDay();
 }
 
 function dbdSetRange(r) {
   dbdRange = r;
-  saveDayByDaySettings();
+  try { var s = dbdSettings(); s.range = r; localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
   [30,60,90].forEach(function(x) {
     var btn = document.getElementById('dbd-range-' + x);
-    if (btn) {
-      btn.style.background = x === r ? 'var(--teal)' : '';
-      btn.style.color      = x === r ? '#fff' : '';
-    }
+    if (btn) { btn.style.background = x === r ? 'var(--teal)' : ''; btn.style.color = x === r ? '#fff' : ''; }
   });
   renderDayByDay();
 }
@@ -4564,19 +4558,25 @@ function dbdSetRange(r) {
 function initDayByDay() {
   if (!state.dayItems) state.dayItems = [];
   var s = dbdSettings();
-  var balEl   = document.getElementById('dbd-balance');
-  var warnEl  = document.getElementById('dbd-warn');
-  var dangerEl= document.getElementById('dbd-danger');
-  if (balEl   && s.balance    !== undefined) balEl.value   = s.balance;
-  if (warnEl  && s.warnThreshold   !== undefined) warnEl.value  = s.warnThreshold;
-  if (dangerEl&& s.dangerThreshold !== undefined) dangerEl.value= s.dangerThreshold;
-  if (s.view)  { dbdView  = s.view;  }
-  if (s.range) { dbdRange = s.range; }
+  var balEl    = document.getElementById('dbd-balance');
+  var warnEl   = document.getElementById('dbd-warn');
+  var dangerEl = document.getElementById('dbd-danger');
+  if (balEl    && s.balance            !== undefined) balEl.value    = s.balance;
+  if (warnEl   && s.warnThreshold      !== undefined) warnEl.value   = s.warnThreshold;
+  if (dangerEl && s.dangerThreshold    !== undefined) dangerEl.value = s.dangerThreshold;
+  if (s.view)  dbdView  = s.view;
+  if (s.range) dbdRange = s.range;
   dbdShowTimestamp(s.balanceUpdated);
 
-  // Style active buttons
-  dbdSetView(dbdView);
-  dbdSetRange(dbdRange);
+  // Update button styles WITHOUT calling dbdSetView/dbdSetRange (avoids re-render loop)
+  ['day','week','month'].forEach(function(x) {
+    var btn = document.getElementById('dbd-view-' + x);
+    if (btn) { btn.style.background = x === dbdView ? 'var(--teal)' : ''; btn.style.color = x === dbdView ? '#fff' : ''; }
+  });
+  [30,60,90].forEach(function(x) {
+    var btn = document.getElementById('dbd-range-' + x);
+    if (btn) { btn.style.background = x === dbdRange ? 'var(--teal)' : ''; btn.style.color = x === dbdRange ? '#fff' : ''; }
+  });
 }
 
 function dateOffset(days) {
