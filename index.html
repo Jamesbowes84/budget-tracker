@@ -511,9 +511,14 @@ select.form-input option{background:var(--navy2);color:var(--white)}
   margin-right:3px;vertical-align:middle;flex-shrink:0;
 }
 .dbd-detail-box {
-  background:var(--card);border:1px solid var(--teal);
+  background:var(--navy2);border:1px solid var(--teal);
   border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;
 }
+.dbd-detail-box table { font-size:13px; }
+.dbd-detail-box th { color:var(--muted)!important; }
+.dbd-detail-box td { color:var(--white); }
+.dbd-detail-box tr[onclick]:hover td { background:rgba(11,181,137,.08); }
+.dbd-detail-box tr[onclick] { transition:background .15s; }
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
@@ -1151,12 +1156,21 @@ select.form-input option{background:var(--navy2);color:var(--white)}
         <input class="form-input" id="tx-amt" type="number" step="0.01" placeholder="0.00">
       </div>
     </div>
-    <div class="form-group" style="margin-bottom:.75rem">
-      <label class="form-label">Type</label>
-      <select class="form-input" id="tx-type">
-        <option value="expense">Expense</option>
-        <option value="income">Income</option>
-      </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="tx-type">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Account</label>
+        <select class="form-input" id="tx-account">
+          <option value="checking">Checking</option>
+          <option value="cc">Credit Card</option>
+        </select>
+      </div>
     </div>
     <div id="tx-rule-option" style="display:none;margin-bottom:.75rem;padding:.75rem;background:rgba(14,138,110,.08);border-radius:8px">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
@@ -2635,6 +2649,7 @@ function openAddTx() {
   document.getElementById('tx-desc').value = '';
   document.getElementById('tx-amt').value = '';
   document.getElementById('tx-type').value = 'expense';
+  document.getElementById('tx-account').value = 'checking';
   var ruleOpt = document.getElementById('tx-rule-option');
   var deleteBtn = document.getElementById('tx-delete-btn');
   if (ruleOpt) ruleOpt.style.display = 'none';
@@ -2655,6 +2670,7 @@ function openEditTx(id) {
   document.getElementById('tx-desc').value = tx.description;
   document.getElementById('tx-amt').value = tx.amount;
   document.getElementById('tx-type').value = tx.type;
+  document.getElementById('tx-account').value = tx.account || 'checking';
 
   var sel = document.getElementById('tx-cat');
   sel.innerHTML = allCategories().map(function(c){
@@ -2683,12 +2699,13 @@ function saveTx() {
   var cat  = document.getElementById('tx-cat').value;
   var amt  = parseFloat(document.getElementById('tx-amt').value);
   var type = document.getElementById('tx-type').value;
+  var account = document.getElementById('tx-account').value || 'checking';
 
   if (!date || !desc || isNaN(amt) || amt <= 0) { showToast('Fill in all fields'); return; }
 
   if (editTxId !== null) {
     var tx = state.transactions.find(function(t){ return t.id === editTxId; });
-    if (tx) { tx.date=date; tx.description=desc; tx.category=cat; tx.amount=amt; tx.type=type; }
+    if (tx) { tx.date=date; tx.description=desc; tx.category=cat; tx.amount=amt; tx.type=type; tx.account=account; }
 
     // Apply to all + save rule if checkbox checked
     var applyRule = document.getElementById('tx-apply-rule');
@@ -2712,7 +2729,7 @@ function saveTx() {
   } else {
     state.transactions.push({
       id: Date.now(),
-      date: date, description: desc, category: cat, amount: amt, type: type
+      date: date, description: desc, category: cat, amount: amt, type: type, account: account
     });
   }
 
@@ -3413,7 +3430,7 @@ function parsePNC(text) {
     if (!isNeg && amt > 5000 && !dUp.includes('MOM BRANDS')) continue;
     var type = isNeg ? 'expense' : 'income';
     var cat = resolveCategory(desc, amt);
-    results.push({ date, description: desc.replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type, skip: false });
+    results.push({ date, description: desc.replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type, account: 'checking', skip: false });
   }
   return results;
 }
@@ -3433,7 +3450,7 @@ function parseCC(text) {
     var amt = parseFloat(amtRaw.replace(/[^0-9.]/g, ''));
     if (isNaN(amt) || amt === 0) continue;
     var cat = resolveCategory(desc, amt);
-    results.push({ date, description: desc.trim().replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type: 'expense', skip: false });
+    results.push({ date, description: desc.trim().replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type: 'expense', account: 'cc', skip: false });
   }
   return results;
 }
@@ -3673,7 +3690,8 @@ function confirmImport() {
       description: row.description,
       category: row.category,
       amount: row.amount,
-      type: row.type
+      type: row.type,
+      account: row.account || 'checking'
     });
   });
 
@@ -3935,7 +3953,7 @@ function recurringFirsOnDate(rule, dateStr) {
 function getRecurringForDate(dateStr) {
   initRecurring();
   var items = [];
-  state.recurring.forEach(function(rule) {
+  state.recurring.forEach(function(rule, idx) {
     if (recurringFirsOnDate(rule, dateStr)) {
       items.push({
         desc: rule.name,
@@ -3944,7 +3962,8 @@ function getRecurringForDate(dateStr) {
         type: rule.billType === 'income' ? 'income' : 'bill',
         category: rule.category,
         confirmed: false,
-        fromRule: true
+        fromRule: true,
+        ruleIdx: idx
       });
     }
   });
@@ -4661,9 +4680,10 @@ function renderAlerts() {
   }
 
   // 7. Low checking balance warning
+  var dbdBal = (typeof computeCurrentBalance === 'function') ? computeCurrentBalance() : { current: 0 };
   var dbdS = dbdSettings ? dbdSettings() : {};
-  if (dbdS.balance !== undefined && dbdS.balance < (dbdS.dangerThreshold || 200)) {
-    urgent.push({ icon:'💸', title: 'Checking balance low', body: 'Current balance $' + Math.round(dbdS.balance).toLocaleString() + ' — below danger threshold', cls:'urgent' });
+  if (dbdBal.current !== 0 && dbdBal.current < (dbdS.dangerThreshold || 200)) {
+    urgent.push({ icon:'💸', title: 'Checking balance low', body: 'Computed balance $' + Math.round(dbdBal.current).toLocaleString() + ' — below danger threshold', cls:'urgent' });
   }
 
   // Summary cards
@@ -4719,20 +4739,87 @@ function dbdUpdateBalance() {
   if (isNaN(bal)) { showToast('Enter a valid balance'); return; }
   var s = dbdSettings();
   s.balance = bal;
+  s.balanceDate = today(); // anchor date — the date this balance is accurate as of
   s.balanceUpdated = new Date().toISOString();
   localStorage.setItem('dbd_settings', JSON.stringify(s));
-  dbdShowTimestamp(s.balanceUpdated);
-  showToast('Balance updated to $' + Math.round(bal).toLocaleString());
+  dbdShowTimestamp(s);
+  showToast('Balance anchored: $' + Math.round(bal).toLocaleString() + ' as of today');
   renderDayByDay();
 }
 
-function dbdShowTimestamp(ts) {
+// Compute what checking balance should be RIGHT NOW based on:
+// 1. The anchored balance (what you entered)
+// 2. The anchor date (when you entered it)
+// 3. All actual CHECKING transactions since then (CC excluded)
+// Recurring rules do NOT adjust the anchor — only real transactions do.
+function computeCurrentBalance() {
+  var s = dbdSettings();
+  var anchorBal  = s.balance || 0;
+  var anchorDate = s.balanceDate || today();
+  var todayStr   = today();
+
+  if (!s.balance) return { current: 0, anchor: 0, anchorDate: todayStr, txCount: 0, delta: 0 };
+
+  // Sum actual CHECKING transactions between anchor date and today
+  var delta = 0;
+  var txCount = 0;
+  (state.transactions || []).forEach(function(t) {
+    if (!t.date) return;
+    if (t.account === 'cc') return; // CC doesn't affect checking
+    if (t.date > anchorDate && t.date <= todayStr) {
+      var amt = parseFloat(t.amount || 0);
+      delta += (t.type === 'income' ? amt : -amt);
+      txCount++;
+    }
+  });
+
+  // Also count one-off day items that have passed since anchor
+  (state.dayItems || []).forEach(function(item) {
+    if (item.date > anchorDate && item.date <= todayStr) {
+      var amt = parseFloat(item.amount || 0);
+      delta += (item.type === 'income' ? amt : -amt);
+      txCount++;
+    }
+  });
+
+  var current = anchorBal + delta;
+
+  // Auto re-anchor: if anchor is stale (>1 day old), silently save
+  // the computed value as the new anchor so scan window stays small
+  if (anchorDate < todayStr && txCount > 0) {
+    s.balance = current;
+    s.balanceDate = todayStr;
+    s.balanceUpdated = new Date().toISOString();
+    try { localStorage.setItem('dbd_settings', JSON.stringify(s)); } catch(e) {}
+  }
+
+  return {
+    current: current,
+    anchor: anchorBal,
+    anchorDate: anchorDate,
+    txCount: txCount,
+    delta: delta
+  };
+}
+
+function dbdShowTimestamp(s) {
   var el = document.getElementById('dbd-balance-ts');
-  if (!el || !ts) return;
-  var d = new Date(ts);
-  var diff = Math.round((Date.now() - d) / 60000); // minutes ago
-  var label = diff < 1 ? 'just now' : diff < 60 ? diff + 'm ago' : diff < 1440 ? Math.round(diff/60) + 'h ago' : Math.round(diff/1440) + 'd ago';
-  el.textContent = 'Last updated: ' + label;
+  if (!el) return;
+  if (!s || !s.balanceDate) { el.textContent = ''; return; }
+
+  var anchorDate = s.balanceDate;
+  var todayStr = today();
+  var daysAgo = Math.round((new Date(todayStr + 'T00:00:00') - new Date(anchorDate + 'T00:00:00')) / 86400000);
+
+  if (daysAgo === 0) {
+    el.innerHTML = '<span style="color:var(--teal2)">Set today — balance is live</span>';
+  } else {
+    var info = computeCurrentBalance();
+    var adj = info.txCount > 0
+      ? ' · <span style="color:var(--teal2)">' + info.txCount + ' tx auto-adjusted (' + (info.delta >= 0 ? '+' : '') + fmtInt(info.delta) + ')</span>'
+      : ' · no transactions since';
+    el.innerHTML = 'Anchored ' + daysAgo + 'd ago (' + dateFmt(anchorDate) + ')' + adj;
+  }
 }
 
 function dbdSetView(v) {
@@ -4767,7 +4854,7 @@ function initDayByDay() {
   if (dangerEl && s.dangerThreshold    !== undefined) dangerEl.value = s.dangerThreshold;
   if (s.view)  dbdView  = s.view;
   if (s.range) dbdRange = s.range;
-  dbdShowTimestamp(s.balanceUpdated);
+  dbdShowTimestamp(s);
 
   // Update button styles WITHOUT calling dbdSetView/dbdSetRange (avoids re-render loop)
   ['day','week','month'].forEach(function(x) {
@@ -4802,15 +4889,17 @@ function buildDayEvents(days, todayStr) {
   var dayEvents = {};
   days.forEach(function(d) { dayEvents[d] = []; });
 
-  // Actual transactions
+  // Actual transactions — checking only (CC doesn't move checking balance)
   state.transactions.forEach(function(t) {
     if (!t.date || !dayEvents[t.date]) return;
+    if (t.account === 'cc') return;
     var amt = parseFloat(t.amount || 0);
     dayEvents[t.date].push({
       desc: t.description, category: t.category,
       amount: t.type === 'income' ? amt : -amt,
       type: t.type === 'income' ? 'income' : 'expense',
-      confirmed: true
+      confirmed: true,
+      txId: t.id
     });
   });
 
@@ -4858,10 +4947,19 @@ function renderDayByDay() {
   initDayByDay();
 
   var s = dbdSettings();
-  var startingBalance = s.balance || 0;
+  var balInfo = computeCurrentBalance();
+  var startingBalance = balInfo.current; // auto-adjusted, not raw
   var warnThreshold   = s.warnThreshold   !== undefined ? s.warnThreshold   : 500;
   var dangerThreshold = s.dangerThreshold !== undefined ? s.dangerThreshold : 200;
   var todayStr = today();
+
+  // Balance prompt — show the computed balance, not the anchor
+  var balEl = document.getElementById('dbd-balance');
+  if (balEl) {
+    if (!s.balance) { balEl.style.borderColor = 'var(--amber2)'; balEl.placeholder = 'Enter balance first!'; }
+    else { balEl.style.borderColor = ''; balEl.value = s.balance; balEl.placeholder = '0.00'; }
+  }
+  dbdShowTimestamp(s);
 
   // Balance prompt
   var balEl = document.getElementById('dbd-balance');
@@ -4891,7 +4989,7 @@ function renderDayByDay() {
 
   var cards = document.getElementById('dbd-cards');
   if (cards) cards.innerHTML = [
-    { label:'Current balance',      val:'$'+Math.round(startingBalance).toLocaleString(), cls: startingBalance<dangerThreshold?'bad':startingBalance<warnThreshold?'warn':'good' },
+    { label:'Checking balance',      val:'$'+Math.round(startingBalance).toLocaleString(), note: balInfo.txCount > 0 ? 'Auto-adjusted from $' + Math.round(balInfo.anchor).toLocaleString() : 'Set ' + dateFmt(balInfo.anchorDate), cls: startingBalance<dangerThreshold?'bad':startingBalance<warnThreshold?'warn':'good' },
     { label:'Lowest ('+dbdRange+'d)', val: futureMin===Infinity?'—':'$'+Math.round(futureMin).toLocaleString(), note: futureMinDate?dateFmt(futureMinDate):'', cls: futureMin<0||futureMin<dangerThreshold?'bad':futureMin<warnThreshold?'warn':'good' },
     { label:'Balance in '+dbdRange+'d', val:'$'+Math.round(endBal).toLocaleString(), cls: endBal<0?'bad':endBal<dangerThreshold?'bad':endBal<warnThreshold?'warn':'good' },
     { label:'Bills due ('+dbdRange+'d)', val:'$'+Math.round(totalBills).toLocaleString(), cls:'neutral' },
@@ -4929,28 +5027,20 @@ function dbdPrevMonth() {
   dbdCalMonth.month--;
   if (dbdCalMonth.month < 0) { dbdCalMonth.month = 11; dbdCalMonth.year--; }
   var s = dbdSettings();
-  renderDbdCalendar(
-    (function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
-    buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
-    buildBalances((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
-      buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
-      s.balance||0, today()),
-    today(), s.warnThreshold||500, s.dangerThreshold||200
-  );
+  var allDays = []; for(var i=-15;i<=dbdRange;i++) allDays.push(dateOffset(i));
+  var dayEvents = buildDayEvents(allDays, today());
+  var balances = buildBalances(allDays, dayEvents, computeCurrentBalance().current, today());
+  renderDbdCalendar(allDays, dayEvents, balances, today(), s.warnThreshold||500, s.dangerThreshold||200);
 }
 
 function dbdNextMonth() {
   dbdCalMonth.month++;
   if (dbdCalMonth.month > 11) { dbdCalMonth.month = 0; dbdCalMonth.year++; }
   var s = dbdSettings();
-  renderDbdCalendar(
-    (function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
-    buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
-    buildBalances((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(),
-      buildDayEvents((function(){ var d=[]; for(var i=-15;i<=dbdRange;i++) d.push(dateOffset(i)); return d; })(), today()),
-      s.balance||0, today()),
-    today(), s.warnThreshold||500, s.dangerThreshold||200
-  );
+  var allDays = []; for(var i=-15;i<=dbdRange;i++) allDays.push(dateOffset(i));
+  var dayEvents = buildDayEvents(allDays, today());
+  var balances = buildBalances(allDays, dayEvents, computeCurrentBalance().current, today());
+  renderDbdCalendar(allDays, dayEvents, balances, today(), s.warnThreshold||500, s.dangerThreshold||200);
 }
 
 function renderDbdCalendar(allDays, dayEvents, balances, todayStr, warn, danger) {
@@ -5040,7 +5130,7 @@ function dbdShowDayDetail(dateStr) {
   var allDays = [];
   for (var i = -15; i <= dbdRange; i++) allDays.push(dateOffset(i));
   var dayEvents = buildDayEvents(allDays, today());
-  var balances  = buildBalances(allDays, dayEvents, s.balance||0, today());
+  var balances  = buildBalances(allDays, dayEvents, computeCurrentBalance().current, today());
 
   var events  = dayEvents[dateStr] || [];
   var bal     = balances[dateStr];
@@ -5055,21 +5145,47 @@ function dbdShowDayDetail(dateStr) {
   var rows = events.map(function(e){
     var color = e.amount > 0 ? 'var(--teal2)' : 'var(--white)';
     var type  = e.confirmed ? (e.amount>0?'Income':'Actual') : (e.amount>0?'Expected':'Planned');
-    return '<tr><td>'+e.desc+(e.category?'<span style="font-size:10px;color:var(--muted)"> · '+e.category+'</span>':'')+'</td>' +
-      '<td><span class="badge '+(e.amount>0?'badge-good':'badge-muted')+'">'+type+'</span></td>' +
-      '<td class="r" style="font-family:var(--mono);color:'+color+'">'+(e.amount>=0?'+':'')+' $'+Math.abs(Math.round(e.amount)).toLocaleString()+'</td></tr>';
-  }).join('') || '<tr><td colspan="3" class="muted" style="text-align:center">No transactions</td></tr>';
+    var typeBadge = e.amount > 0 ? 'badge-good' : (e.confirmed ? 'badge-muted' : 'badge-warn');
+
+    // Build onclick for editing
+    var onclick = '';
+    var editHint = '';
+    if (e.txId) {
+      onclick = ' onclick="openEditTx(' + e.txId + ')" style="cursor:pointer"';
+      editHint = '<span style="color:var(--teal2);font-size:10px;margin-left:6px">edit</span>';
+    } else if (e.oneoff && e.idx !== undefined) {
+      onclick = ' onclick="openEditDayItem(' + e.idx + ')" style="cursor:pointer"';
+      editHint = '<span style="color:var(--teal2);font-size:10px;margin-left:6px">edit</span>';
+    } else if (e.fromRule && e.ruleIdx !== undefined) {
+      onclick = ' onclick="nav(\'recurring\');setTimeout(function(){openEditRecurring(' + e.ruleIdx + ')},150)" style="cursor:pointer"';
+      editHint = '<span style="color:var(--teal2);font-size:10px;margin-left:6px">edit rule</span>';
+    }
+
+    return '<tr' + onclick + ' title="Click to edit">' +
+      '<td style="color:var(--white)">' + e.desc +
+        (e.category ? '<span style="font-size:10px;color:var(--muted);margin-left:6px">' + e.category + '</span>' : '') +
+        editHint +
+      '</td>' +
+      '<td><span class="badge ' + typeBadge + '">' + type + '</span></td>' +
+      '<td class="r" style="font-family:var(--mono);color:' + color + ';font-weight:600">' + (e.amount >= 0 ? '+' : '-') + ' $' + Math.abs(Math.round(e.amount)).toLocaleString() + '</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="3" style="text-align:center;padding:1.5rem;color:var(--muted)">No transactions</td></tr>';
+
+  var balColor = bal < 0 ? 'var(--red2)' : bal < (s.dangerThreshold||200) ? 'var(--red2)' : bal < (s.warnThreshold||500) ? 'var(--amber2)' : 'var(--teal2)';
 
   detailEl.style.display = 'block';
   detailEl.innerHTML = '<div class="dbd-detail-box">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">' +
-      '<div style="font-size:14px;font-weight:600">'+dateFmt(dateStr) + ' ' + dateToDisplay(dateStr) + '</div>' +
-      (bal !== undefined ? '<div style="font-family:var(--mono);font-size:16px;font-weight:700;color:'+(bal<0?'var(--red2)':bal<(s.dangerThreshold||200)?'var(--red2)':bal<(s.warnThreshold||500)?'var(--amber2)':'var(--teal2)')+'">' +
-        '$'+Math.round(bal).toLocaleString()+'</div>' : '') +
+      '<div style="font-size:16px;font-weight:700;color:var(--white)">' + dateFmt(dateStr) + ' ' + dateToDisplay(dateStr) + '</div>' +
+      (bal !== undefined ? '<div style="font-family:var(--mono);font-size:18px;font-weight:700;color:' + balColor + '">$' + Math.round(bal).toLocaleString() + '</div>' : '') +
       '<button onclick="document.getElementById(\'dbd-day-detail\').style.display=\'none\'" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">&#x2715;</button>' +
     '</div>' +
-    '<table style="width:100%"><thead><tr><th>Description</th><th>Type</th><th class="r">Amount</th></tr></thead>' +
-    '<tbody>'+rows+'</tbody></table>' +
+    '<table style="width:100%"><thead><tr>' +
+      '<th style="color:var(--muted)">Description</th>' +
+      '<th style="color:var(--muted)">Type</th>' +
+      '<th class="r" style="color:var(--muted)">Amount</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' +
   '</div>';
 }
 
