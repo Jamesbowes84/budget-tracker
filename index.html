@@ -726,10 +726,7 @@ tbody td.muted { color:var(--muted)!important; }
           <tbody id="needs-tbl"></tbody>
         </table>
       </div>
-      <div style="display:flex;gap:8px;margin-top:.5rem">
-        <button class="btn btn-ghost btn-sm" onclick="openAddNeed()">+ Add Line Item</button>
-        <button class="btn btn-ghost btn-sm" onclick="syncAllRecurringToBudget()" title="Create or update budget items from your recurring rules">↻ Sync from Recurring</button>
-      </div>
+      <button class="btn btn-ghost btn-sm" onclick="openAddNeed()">+ Add Line Item</button>
     </div>
 
     <!-- WANTS -->
@@ -746,15 +743,6 @@ tbody td.muted { color:var(--muted)!important; }
     </div>
 
     <!-- SUBSCRIPTIONS -->
-    <div class="page" id="page-subs">
-      <div class="page-title">Subscriptions → Recurring</div>
-      <div class="page-sub">Subscriptions are now managed as recurring rules for a single source of truth.</div>
-      <div id="subs-migrate-area"></div>
-      <div style="margin-top:1rem">
-        <button class="btn btn-primary" onclick="nav('recurring')">Go to Recurring →</button>
-      </div>
-    </div>
-
     <!-- BUDGET PLAN -->
     <div class="page" id="page-budget">
       <div class="page-title">Budget Plan</div>
@@ -1120,7 +1108,10 @@ tbody td.muted { color:var(--muted)!important; }
   
     <!-- RECURRING RULES -->
     <div class="page" id="page-recurring">
-      <div class="page-title">Recurring Rules</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="page-title" style="margin-bottom:0">Recurring Rules</div>
+        <button class="btn btn-primary btn-sm" onclick="openBudgetSync()">↻ Budget Sync</button>
+      </div>
       <div class="page-sub">Define your bills and income — auto-populates Day by Day and Bill Calendar</div>
 
       <div class="cards-grid" id="rec-cards"></div>
@@ -1317,39 +1308,7 @@ tbody td.muted { color:var(--muted)!important; }
   </div>
 </div>
 
-<!-- SUBSCRIPTION MODAL -->
-<div class="modal-overlay" id="modal-sub">
-  <div class="modal">
-    <div class="modal-title" id="modal-sub-title">Add Subscription</div>
-    <input type="hidden" id="edit-sub-idx">
-    <div class="form-group" style="margin-bottom:.75rem">
-      <label class="form-label">Service Name</label>
-      <input class="form-input" id="sub-name">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Monthly Cost ($)</label>
-        <input class="form-input" id="sub-amt" type="number" step="0.01">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Status</label>
-        <select class="form-input" id="sub-status">
-          <option value="keep">Keeping</option>
-          <option value="cut">Cut / Cancelled</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group" style="margin-bottom:.75rem">
-      <label class="form-label">Notes</label>
-      <input class="form-input" id="sub-notes">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-danger btn-sm" onclick="deleteSub()">Delete</button>
-      <button class="btn btn-ghost" onclick="closeModal('modal-sub')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSub()">Save</button>
-    </div>
-  </div>
-</div>
+
 
 
 
@@ -1726,16 +1685,15 @@ tbody td.muted { color:var(--muted)!important; }
   </div>
 </div>
 
-<!-- SYNC CONFLICTS MODAL -->
+<!-- BUDGET SYNC MODAL -->
 <div class="modal-overlay" id="modal-sync">
-  <div class="modal" style="width:640px;max-height:90vh">
-    <div class="modal-title">Sync Conflicts</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">These budget items have different amounts than their recurring rules. Pick which value to keep for each.</div>
-    <div style="max-height:400px;overflow-y:auto" id="sync-conflicts-list"></div>
-    <div id="sync-new-items" style="margin-top:1rem"></div>
+  <div class="modal" style="width:720px;max-height:90vh">
+    <div class="modal-title">Budget Sync</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">Match recurring rules to budget items. Amounts sync from recurring → budget.</div>
+    <div style="max-height:500px;overflow-y:auto" id="sync-match-list"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-sync')">Cancel</button>
-      <button class="btn btn-primary" onclick="applySyncChoices()">Apply</button>
+      <button class="btn btn-primary" onclick="applySyncMatches()">Apply Sync</button>
     </div>
   </div>
 </div>
@@ -1844,16 +1802,8 @@ var DEFAULT_STATE = {
     {name:"Travel", amt:0, notes:"Trips, hotels, flights"},
     {name:"Cash", amt:0, notes:"Tips and misc pocket money"},
   ],
-  subscriptions: [
-    {name:"Add your first subscription", amt:0, status:"keep", notes:"Edit or delete this example"},
-  ],
-  roadmap: [
-    {when:"Now", title:"Set up your budget", note:"Add your income, set budget amounts for needs and wants.", status:"active"},
-    {when:"Month 1", title:"Track every transaction", note:"Import your bank CSV or add manually. See where money actually goes.", status:"future"},
-    {when:"Month 3", title:"Identify the levers", note:"Which want categories are over budget? Those are your first cuts.", status:"future"},
-    {when:"Month 6", title:"Debt paydown", note:"Once spending is under income, throw the difference at high-interest debt.", status:"future"},
-    {when:"Month 12+", title:"Build the cushion", note:"3-month emergency fund. Then invest the rest.", status:"future"},
-  ]
+  subscriptions: [],
+  roadmap: []
 };
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -2816,55 +2766,7 @@ function renderWants() {
 
 // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
-function renderSubs() {
-  // Show migration status
-  var area = document.getElementById('subs-migrate-area');
-  if (!area) return;
-  var subs = state.subscriptions || [];
-  var keep = subs.filter(function(s){ return s.status === 'keep'; });
-  if (keep.length === 0) {
-    area.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted)">All subscriptions migrated to Recurring.</div>';
-    return;
-  }
-  area.innerHTML = '<div class="tbl-wrap" style="margin-bottom:1rem"><table>' +
-    '<thead><tr><th>Subscription</th><th class="r">Amount</th><th>Status</th></tr></thead><tbody>' +
-    subs.map(function(s) {
-      return '<tr><td>' + s.name + '</td><td class="r">' + fmtInt(s.amt) + '/mo</td><td>' + s.status + '</td></tr>';
-    }).join('') +
-    '</tbody></table></div>' +
-    '<button class="btn btn-primary" onclick="migrateSubscriptions()">Migrate ' + keep.length + ' subscriptions to Recurring</button>';
-}
-
-function migrateSubscriptions() {
-  initRecurring();
-  var subs = state.subscriptions || [];
-  var migrated = 0;
-  subs.forEach(function(s) {
-    if (s.status !== 'keep' || !s.amt) return;
-    // Check if a recurring rule with same name already exists
-    var exists = state.recurring.some(function(r){ return r.name === s.name; });
-    if (exists) return;
-    state.recurring.push({
-      name: s.name,
-      billType: 'fixed',
-      amount: s.amt,
-      variance: 0,
-      category: 'Subscriptions',
-      schedule: 'monthly',
-      day: 1,
-      start: today(),
-      end: '',
-      notes: s.notes || '',
-      active: true
-    });
-    migrated++;
-  });
-  // Clear subscriptions after migration
-  state.subscriptions = [];
-  saveState();
-  showToast(migrated + ' subscriptions migrated to Recurring');
-  nav('recurring');
-}
+function renderSubs() { nav('recurring'); }
 
 // ─── BUDGET PLAN ──────────────────────────────────────────────────────────────
 
@@ -3422,56 +3324,11 @@ function deleteBudgetItem() {
   renderPage(currentPage);
 }
 
-function openEditSub(idx) {
-  var s = state.subscriptions[idx];
-  document.getElementById('modal-sub-title').textContent = 'Edit Subscription';
-  document.getElementById('edit-sub-idx').value = idx;
-  document.getElementById('sub-name').value = s.name;
-  document.getElementById('sub-amt').value = s.amt;
-  document.getElementById('sub-status').value = s.status;
-  document.getElementById('sub-notes').value = s.notes || '';
-  document.getElementById('modal-sub').classList.add('open');
-}
-
-function openAddSub() {
-  document.getElementById('modal-sub-title').textContent = 'Add Subscription';
-  document.getElementById('edit-sub-idx').value = -1;
-  document.getElementById('sub-name').value = '';
-  document.getElementById('sub-amt').value = '';
-  document.getElementById('sub-status').value = 'keep';
-  document.getElementById('sub-notes').value = '';
-  document.getElementById('modal-sub').classList.add('open');
-}
-
-function saveSub() {
-  var idx    = parseInt(document.getElementById('edit-sub-idx').value);
-  var name   = document.getElementById('sub-name').value.trim();
-  var amt    = parseFloat(document.getElementById('sub-amt').value);
-  var status = document.getElementById('sub-status').value;
-  var notes  = document.getElementById('sub-notes').value.trim();
-
-  if (!name || isNaN(amt)) { showToast('Fill in all fields'); return; }
-
-  if (idx === -1) {
-    state.subscriptions.push({name, amt, status, notes});
-  } else {
-    state.subscriptions[idx] = {name, amt, status, notes};
-  }
-  saveState();
-  closeModal('modal-sub');
-  showToast('Saved');
-  renderSubs();
-}
-
-function deleteSub() {
-  var idx = parseInt(document.getElementById('edit-sub-idx').value);
-  if (idx === -1) { closeModal('modal-sub'); return; }
-  state.subscriptions.splice(idx, 1);
-  saveState();
-  closeModal('modal-sub');
-  showToast('Deleted');
-  renderSubs();
-}
+// Subscriptions removed — now managed as Recurring rules
+function openEditSub() { nav('recurring'); }
+function openAddSub() { openAddRecurring('fixed'); }
+function saveSub() {}
+function deleteSub() {}
 
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
@@ -5083,141 +4940,172 @@ function syncRecurringToBudget(rule) {
   });
 }
 
-// Bulk sync — collect conflicts, show modal for user to choose
-var _pendingSync = { conflicts: [], newItems: [] };
+// ─── BUDGET SYNC (lives on Recurring page) ──────────────────────────────────
 
-function syncAllRecurringToBudget() {
+var _syncMatches = [];
+
+function openBudgetSync() {
   initRecurring();
-  var conflicts = [];
-  var newItems = [];
-  var upToDate = 0;
+  var rules = (state.recurring || []).filter(function(r) { return r.active && r.billType !== 'income'; });
+  if (rules.length === 0) { showToast('No active expense rules to sync'); return; }
 
-  state.recurring.forEach(function(rule) {
-    if (rule.billType === 'income' || !rule.active) return;
+  // Build pool of all budget items with their source
+  var pool = [];
+  state.needs.forEach(function(n, i) { pool.push({ type:'need', idx:i, name:n.name, amt:n.amt, key:'need-'+i }); });
+  state.wants.forEach(function(w, i) { pool.push({ type:'want', idx:i, name:w.name, amt:w.amt, key:'want-'+i }); });
 
+  var claimed = {}; // track which budget items are already matched
+
+  // Smart match each rule to a budget item
+  _syncMatches = rules.map(function(rule, ri) {
     var monthlyAmt = recurringMonthlyAmt(rule);
     var freq = recurringToFreq(rule.schedule);
     var rawAmt = (freq === 'monthly' && rule.schedule === 'bimonthly') ? monthlyAmt : rule.amount;
-    var cat = rule.category || rule.name;
+    var rName = rule.name.toUpperCase();
+    var rCat = (rule.category || '').toUpperCase();
 
-    var needMatch = state.needs.find(function(n) { return n.name === rule.name || n.name === cat; });
-    var wantMatch = state.wants.find(function(w) { return w.name === rule.name || w.name === cat; });
-    var match = needMatch || wantMatch;
-    var matchType = needMatch ? 'need' : (wantMatch ? 'want' : null);
-    var matchIdx = needMatch ? state.needs.indexOf(needMatch) : (wantMatch ? state.wants.indexOf(wantMatch) : -1);
+    // 1. Exact name match
+    var match = pool.find(function(p) { return !claimed[p.key] && p.name.toUpperCase() === rName; });
+    // 2. Category matches budget name
+    if (!match && rCat) match = pool.find(function(p) { return !claimed[p.key] && p.name.toUpperCase() === rCat; });
+    // 3. Partial — rule name contains budget name or vice versa
+    if (!match) match = pool.find(function(p) {
+      if (claimed[p.key]) return false;
+      var pUp = p.name.toUpperCase();
+      return (pUp.length > 3 && rName.includes(pUp)) || (rName.length > 3 && pUp.includes(rName));
+    });
 
-    if (match) {
-      if (match.amt !== monthlyAmt) {
-        conflicts.push({
-          name: rule.name, budgetAmt: match.amt, budgetFreq: match.freq || 'monthly',
-          recurringAmt: monthlyAmt, recurringRawAmt: rawAmt, recurringFreq: freq,
-          schedule: scheduleLabel(rule), matchType: matchType, matchIdx: matchIdx,
-          choice: 'recurring'
-        });
-      } else { upToDate++; }
-    } else {
-      newItems.push({ name: rule.name, monthlyAmt: monthlyAmt, rawAmt: rawAmt, freq: freq, schedule: scheduleLabel(rule) });
-    }
+    if (match) claimed[match.key] = true;
+
+    return {
+      ruleIdx: ri,
+      ruleName: rule.name,
+      ruleMonthly: monthlyAmt,
+      ruleRawAmt: rawAmt,
+      ruleFreq: freq,
+      ruleSchedule: scheduleLabel(rule),
+      matchKey: match ? match.key : 'create',
+      matchName: match ? match.name : null,
+      matchAmt: match ? match.amt : 0,
+      autoMatched: !!match,
+      amtMatch: match ? match.amt === monthlyAmt : false
+    };
   });
 
-  if (conflicts.length === 0 && newItems.length === 0) {
-    showToast('Everything in sync — ' + upToDate + ' items matched');
-    return;
-  }
+  // Build UI
+  var optionsHtml = '<option value="create">+ Create new budget item</option><option value="skip">Skip (don\'t sync)</option>';
+  pool.forEach(function(p) {
+    optionsHtml += '<option value="' + p.key + '">' + (p.type==='need'?'Need':'Want') + ': ' + p.name + ' (' + fmtInt(p.amt) + '/mo)</option>';
+  });
 
-  _pendingSync = { conflicts: conflicts, newItems: newItems };
+  var html = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between">' +
+    '<span>RECURRING RULE</span><span>BUDGET ITEM</span></div>';
 
-  // No conflicts? Just apply new items directly
-  if (conflicts.length === 0) { applySyncChoices(); return; }
+  html += _syncMatches.map(function(m, i) {
+    var statusIcon = m.autoMatched ? (m.amtMatch ? '✓' : '⚠') : '?';
+    var statusColor = m.autoMatched ? (m.amtMatch ? 'var(--teal2)' : 'var(--amber2)') : 'var(--muted)';
+    var statusText = m.autoMatched ? (m.amtMatch ? 'Matched' : 'Amount differs') : 'No match — will create';
 
-  // Build conflict UI
-  var html = conflicts.map(function(c, i) {
-    return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border)">' +
-      '<div style="font-size:13px;font-weight:600;margin-bottom:6px">' + c.name + '</div>' +
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
       '<div style="display:flex;gap:12px;align-items:center">' +
-        '<label style="flex:1;cursor:pointer;padding:8px 12px;border-radius:8px;border:2px solid var(--border);transition:all .15s" id="sync-budget-' + i + '" onclick="setSyncChoice(' + i + ',\'budget\')">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Keep budget value</div>' +
-          '<div style="font-family:var(--mono);font-size:15px;font-weight:700">' + fmtInt(c.budgetAmt) + '<span style="font-size:11px;color:var(--muted)">/mo</span></div>' +
-        '</label>' +
-        '<span style="color:var(--muted);font-size:18px">→</span>' +
-        '<label style="flex:1;cursor:pointer;padding:8px 12px;border-radius:8px;border:2px solid var(--teal);background:rgba(11,181,137,.06);transition:all .15s" id="sync-recurring-' + i + '" onclick="setSyncChoice(' + i + ',\'recurring\')">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Use recurring (' + c.schedule + ')</div>' +
-          '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--teal2)">' + fmtInt(c.recurringAmt) + '<span style="font-size:11px;color:var(--muted)">/mo</span></div>' +
-          (c.recurringFreq !== 'monthly' ? '<div style="font-size:10px;color:var(--muted)">' + fmtInt(c.recurringRawAmt) + ' ' + freqLabel(c.recurringFreq) + '</div>' : '') +
-        '</label>' +
+        // Left: recurring rule
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:600">' + m.ruleName + '</div>' +
+          '<div style="font-family:var(--mono);font-size:14px;color:var(--teal2);margin-top:2px">' + fmtInt(m.ruleMonthly) + '/mo' +
+            (m.ruleFreq !== 'monthly' ? ' <span style="font-size:10px;color:var(--muted)">(' + fmtInt(m.ruleRawAmt) + ' ' + freqLabel(m.ruleFreq) + ')</span>' : '') +
+          '</div>' +
+          '<div style="font-size:10px;color:var(--muted)">' + m.ruleSchedule + '</div>' +
+        '</div>' +
+        // Middle: status
+        '<div style="text-align:center;width:40px">' +
+          '<div style="font-size:16px;color:' + statusColor + '">' + statusIcon + '</div>' +
+          '<div style="font-size:9px;color:' + statusColor + '">' + statusText + '</div>' +
+        '</div>' +
+        // Right: budget match dropdown
+        '<div style="flex:1">' +
+          '<select class="form-input" id="sync-match-' + i + '" onchange="syncMatchChanged(' + i + ')" style="font-size:12px;padding:6px 8px">' +
+            optionsHtml.replace('value="' + m.matchKey + '"', 'value="' + m.matchKey + '" selected') +
+          '</select>' +
+          (m.autoMatched && !m.amtMatch ? '<div style="font-size:11px;color:var(--amber2);margin-top:3px">Budget: ' + fmtInt(m.matchAmt) + '/mo → will update to ' + fmtInt(m.ruleMonthly) + '/mo</div>' : '') +
+          (m.autoMatched && m.amtMatch ? '<div style="font-size:11px;color:var(--teal2);margin-top:3px">✓ In sync at ' + fmtInt(m.matchAmt) + '/mo</div>' : '') +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 
-  document.getElementById('sync-conflicts-list').innerHTML = html;
-
-  // New items
-  if (newItems.length > 0) {
-    document.getElementById('sync-new-items').innerHTML =
-      '<div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--teal2)">' + newItems.length + ' new items to create:</div>' +
-      newItems.map(function(n, i) {
-        return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">' +
-          '<input type="checkbox" checked id="sync-new-' + i + '" style="cursor:pointer">' +
-          '<span style="flex:1;color:var(--white)">' + n.name + '</span>' +
-          '<span style="font-family:var(--mono);color:var(--muted)">' + fmtInt(n.monthlyAmt) + '/mo</span>' +
-          '<span style="font-size:10px;color:var(--muted)">' + n.schedule + '</span>' +
+  // Show unmatched budget items (exist in budget but no recurring rule)
+  var unmatchedBudget = pool.filter(function(p) { return !claimed[p.key]; });
+  if (unmatchedBudget.length > 0) {
+    html += '<div style="margin-top:1rem;padding-top:.75rem;border-top:2px solid var(--border)">' +
+      '<div style="font-size:12px;color:var(--amber2);font-weight:600;margin-bottom:6px">' + unmatchedBudget.length + ' budget items with no recurring rule:</div>' +
+      unmatchedBudget.map(function(p) {
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px">' +
+          '<span style="color:var(--muted)">' + (p.type==='need'?'Need':'Want') + ': ' + p.name + '</span>' +
+          '<span style="font-family:var(--mono);color:var(--muted)">' + fmtInt(p.amt) + '/mo</span>' +
         '</div>';
-      }).join('');
-  } else {
-    document.getElementById('sync-new-items').innerHTML = '';
+      }).join('') +
+      '<div style="font-size:10px;color:var(--muted);margin-top:4px">These may be one-off budget items or need a recurring rule added.</div>' +
+    '</div>';
   }
 
+  document.getElementById('sync-match-list').innerHTML = html;
   document.getElementById('modal-sync').classList.add('open');
 }
 
-function setSyncChoice(idx, choice) {
-  _pendingSync.conflicts[idx].choice = choice;
-  var bEl = document.getElementById('sync-budget-' + idx);
-  var rEl = document.getElementById('sync-recurring-' + idx);
-  if (choice === 'budget') {
-    bEl.style.borderColor = 'var(--teal)'; bEl.style.background = 'rgba(11,181,137,.06)';
-    rEl.style.borderColor = 'var(--border)'; rEl.style.background = 'transparent';
-  } else {
-    rEl.style.borderColor = 'var(--teal)'; rEl.style.background = 'rgba(11,181,137,.06)';
-    bEl.style.borderColor = 'var(--border)'; bEl.style.background = 'transparent';
-  }
+function syncMatchChanged(idx) {
+  var sel = document.getElementById('sync-match-' + idx);
+  _syncMatches[idx].matchKey = sel.value;
 }
 
-function applySyncChoices() {
-  var updated = 0, created = 0, kept = 0;
+function applySyncMatches() {
+  var updated = 0, created = 0, skipped = 0;
 
-  _pendingSync.conflicts.forEach(function(c) {
-    if (c.choice === 'recurring') {
-      var arr = c.matchType === 'need' ? state.needs : state.wants;
-      if (arr[c.matchIdx]) {
-        arr[c.matchIdx].amt = c.recurringAmt;
-        arr[c.matchIdx].rawAmt = c.recurringRawAmt;
-        arr[c.matchIdx].freq = c.recurringFreq;
+  _syncMatches.forEach(function(m) {
+    var key = m.matchKey;
+    if (key === 'skip') { skipped++; return; }
+
+    var freq = m.ruleFreq;
+    var rawAmt = m.ruleRawAmt;
+    var monthlyAmt = m.ruleMonthly;
+
+    if (key === 'create') {
+      // Create new budget item in Needs
+      state.needs.push({
+        name: m.ruleName,
+        amt: monthlyAmt,
+        rawAmt: rawAmt,
+        freq: freq,
+        notes: 'Synced from: ' + m.ruleSchedule,
+        group: 'Other'
+      });
+      created++;
+    } else {
+      // Update existing budget item
+      var parts = key.split('-');
+      var arr = parts[0] === 'need' ? state.needs : state.wants;
+      var idx = parseInt(parts[1]);
+      if (arr[idx]) {
+        arr[idx].amt = monthlyAmt;
+        arr[idx].rawAmt = rawAmt;
+        arr[idx].freq = freq;
         updated++;
       }
-    } else { kept++; }
-  });
-
-  _pendingSync.newItems.forEach(function(n, i) {
-    var cb = document.getElementById('sync-new-' + i);
-    if (cb && !cb.checked) return;
-    state.needs.push({
-      name: n.name, amt: n.monthlyAmt, rawAmt: n.rawAmt, freq: n.freq,
-      notes: 'From recurring: ' + n.schedule, group: 'Other'
-    });
-    created++;
+    }
   });
 
   saveState();
   closeModal('modal-sync');
   var msg = [];
-  if (updated) msg.push(updated + ' updated from recurring');
-  if (kept) msg.push(kept + ' kept at budget value');
+  if (updated) msg.push(updated + ' updated');
   if (created) msg.push(created + ' created');
-  showToast(msg.join(', '));
-  _pendingSync = { conflicts: [], newItems: [] };
+  if (skipped) msg.push(skipped + ' skipped');
+  showToast(msg.join(', ') || 'No changes');
+  _syncMatches = [];
   renderPage(currentPage);
 }
+
+// Legacy wrapper
+function syncAllRecurringToBudget() { openBudgetSync(); }
 
 function deleteRecurring() {
   var idx = parseInt(document.getElementById('edit-rec-idx').value);
