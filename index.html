@@ -1142,6 +1142,36 @@ tbody td.muted { color:var(--muted)!important; }
           </table>
         </div>
       </div>
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Category Rules</div>
+          <button class="btn btn-primary btn-sm" onclick="toggleAddRule()">+ Add Rule</button>
+        </div>
+        <div id="add-rule-form" style="display:none;margin-bottom:1rem;padding:1rem;background:var(--card);border:1px solid var(--border);border-radius:10px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:.75rem">New keyword rule</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">If description contains</label>
+              <input class="form-input" id="rule-keyword" placeholder="e.g. CHIPOTLE, WALMART, SHEETZ...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Assign to category</label>
+              <select class="form-input" id="rule-category"></select>
+            </div>
+            <div style="display:flex;gap:6px;align-self:flex-end">
+              <button class="btn btn-primary btn-sm" onclick="saveNewRule()">Save</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleAddRule()">Cancel</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Rule applies to all future imports AND retroactively re-categorizes existing matching transactions.</div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Keyword</th><th>Category</th><th>Matches</th><th></th></tr></thead>
+            <tbody id="rules-tbl"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -3021,9 +3051,9 @@ var DB = {
     } catch(e) { return null; }
   },
 
-  // Upload JSON to Dropbox
+  // Upload JSON to Dropbox — returns 'ok', 'auth_error', or 'transient'
   upload: async function(path, data) {
-    if (!DB.token) return false;
+    if (!DB.token) return 'auth_error';
     try {
       var res = await fetch('https://content.dropboxapi.com/2/files/upload', {
         method: 'POST',
@@ -3034,24 +3064,29 @@ var DB = {
         },
         body: JSON.stringify(data)
       });
-      return res.ok;
-    } catch(e) { return false; }
+      if (res.ok) return 'ok';
+      if (res.status === 401 || res.status === 400) return 'auth_error';
+      return 'transient'; // 429 rate limit, 500 server error, etc
+    } catch(e) { return 'transient'; }
   },
 
   // Load state + overrides from Dropbox on app open
   init: async function() {
     DB.token = DB.getToken();
+    DB._initializing = true; // suppress auto-save hooks during init
+    DB.failCount = 0; // reset on every init attempt
 
     // Wire up online/offline events
     window.addEventListener('online',  DB.onOnline);
     window.addEventListener('offline', DB.onOffline);
 
-    if (!DB.token) { DB.showSetup(); return; }
+    if (!DB.token) { DB._initializing = false; DB.showSetup(); return; }
 
     // If offline at startup, skip cloud load, use localStorage
     if (!navigator.onLine) {
       DB.updateStatus('offline');
       DB.pendingSave = false;
+      DB._initializing = false;
       return;
     }
 
@@ -3094,12 +3129,14 @@ var DB = {
     }
 
     // Render with fresh data
+    DB._initializing = false; // re-enable auto-save hooks
     initMonthSelector();
     renderPage(currentPage);
   },
 
   // Debounced auto-save — fires 3 seconds after last change
   scheduleSave: function() {
+    if (DB._initializing) return; // don't save during init
     clearTimeout(DB.saveTimer);
     DB.updateStatus('saving');
     DB.saveTimer = setTimeout(DB.doSave, 3000);
@@ -3109,15 +3146,15 @@ var DB = {
 
   failCount: 0,
 
+  _initializing: false,
+
   doSave: async function() {
-    if (!DB.token || DB.saving) return;
+    if (!DB.token || DB.saving || DB._initializing) return;
     if (DB.failCount >= 3) {
-      // Stop hammering after 3 consecutive failures — token is bad
       DB.updateStatus('error', 'Token invalid — click Sync');
       return;
     }
 
-    // Offline check
     if (!navigator.onLine) {
       DB.pendingSave = true;
       DB.updateStatus('offline');
@@ -3126,17 +3163,25 @@ var DB = {
 
     DB.saving = true;
     DB.pendingSave = false;
-    var ok = await DB.upload(DB.FILE_PATH, state);
-    var combinedOverrides = { flat: loadOverrides(), amount: loadAmountRules() };
-    await DB.upload(DB.OVERRIDE_PATH, combinedOverrides);
+    var result = await DB.upload(DB.FILE_PATH, state);
+    // Only upload overrides if main upload succeeded
+    if (result === 'ok') {
+      var combinedOverrides = { flat: loadOverrides(), amount: loadAmountRules() };
+      await DB.upload(DB.OVERRIDE_PATH, combinedOverrides);
+    }
     DB.saving = false;
 
-    if (ok) {
+    if (result === 'ok') {
       DB.failCount = 0;
       DB.updateStatus('connected');
-    } else {
+    } else if (result === 'auth_error') {
       DB.failCount++;
       DB.updateStatus('error', 'Token issue — click Sync (' + DB.failCount + '/3)');
+    } else {
+      // Transient error — retry later, don't increment failCount
+      DB.updateStatus('connected'); // stay "connected", just couldn't save this time
+      DB.pendingSave = true;
+      setTimeout(DB.doSave, 15000); // retry in 15s
     }
   },
 
@@ -3836,6 +3881,7 @@ function renderMisc() {
   }).join('');
 
   tbody.innerHTML = rows;
+  renderRules();
 }
 
 function miscApplyCat(txId, makeRule) {
@@ -3904,20 +3950,96 @@ function showUndoBar(vendorKey, newCat, count) {
 function undoLastRule() {
   if (!window._lastRuleUndo) { showToast('Nothing to undo'); return; }
   var undo = window._lastRuleUndo;
-  // Restore transaction categories
   undo.snapshot.forEach(function(snap) {
     var tx = state.transactions.find(function(t){ return t.id === snap.id; });
     if (tx) tx.category = snap.category;
   });
-  // Restore overrides
   try { localStorage.setItem('bowes_cat_overrides', undo.overrides); } catch(e) {}
-  // Remove the rule from overrides
   saveState();
   window._lastRuleUndo = null;
   var bar = document.getElementById('misc-undo-bar');
   if (bar) bar.remove();
   showToast('Undone — rule removed, categories restored');
   renderMisc();
+}
+
+// ─── CATEGORY KEYWORD RULES ──────────────────────────────────────────────────
+
+function toggleAddRule() {
+  var form = document.getElementById('add-rule-form');
+  if (!form) return;
+  var isOpen = form.style.display !== 'none';
+  form.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    document.getElementById('rule-keyword').value = '';
+    var sel = document.getElementById('rule-category');
+    sel.innerHTML = allCategories().map(function(c) {
+      return '<option value="' + c + '">' + c + '</option>';
+    }).join('');
+    document.getElementById('rule-keyword').focus();
+  }
+}
+
+function saveNewRule() {
+  var keyword = document.getElementById('rule-keyword').value.trim().toUpperCase();
+  var category = document.getElementById('rule-category').value;
+  if (!keyword) { showToast('Enter a keyword'); return; }
+  if (!category) { showToast('Select a category'); return; }
+
+  // Save to overrides
+  var overrides = loadOverrides();
+  overrides[keyword] = category;
+  saveOverrides(overrides);
+
+  // Retroactively apply to existing transactions
+  var count = 0;
+  state.transactions.forEach(function(t) {
+    if (t.description.toUpperCase().includes(keyword)) {
+      if (t.category === 'Other' || t.category === 'Uncategorized' || !t.category) {
+        t.category = category;
+        count++;
+      }
+    }
+  });
+  saveState();
+
+  document.getElementById('add-rule-form').style.display = 'none';
+  showToast('Rule saved: "' + keyword + '" → ' + category + (count > 0 ? ' (' + count + ' transactions updated)' : ''));
+  renderMisc();
+}
+
+function deleteRule(keyword) {
+  var overrides = loadOverrides();
+  delete overrides[keyword];
+  saveOverrides(overrides);
+  showToast('Rule deleted: "' + keyword + '"');
+  renderMisc();
+}
+
+function renderRules() {
+  var tbody = document.getElementById('rules-tbl');
+  if (!tbody) return;
+  var overrides = loadOverrides();
+  var keys = Object.keys(overrides).sort(function(a, b) { return a.localeCompare(b); });
+
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No rules yet — create one above or assign categories during import</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = keys.map(function(key) {
+    var cat = overrides[key];
+    // Count matching transactions
+    var matches = state.transactions.filter(function(t) {
+      return t.description.toUpperCase().includes(key);
+    }).length;
+    return '<tr>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + key + '</td>' +
+      '<td><span class="badge badge-muted">' + cat + '</span></td>' +
+      '<td class="muted" style="font-family:var(--mono)">' + matches + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="deleteRule(\'' + key.replace(/'/g, "\\'") + '\')" style="font-size:11px;color:var(--red2)">Delete</button></td>' +
+    '</tr>';
+  }).join('');
 }
 
 // ─── RECURRING RULES ──────────────────────────────────────────────────────────
