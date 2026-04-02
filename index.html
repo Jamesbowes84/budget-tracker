@@ -1165,7 +1165,11 @@ tbody td.muted { color:var(--muted)!important; }
               <button class="btn btn-ghost btn-sm" onclick="toggleAddRule()">Cancel</button>
             </div>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">Rule applies to all future imports AND retroactively re-categorizes existing matching transactions.</div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="rule-retroactive" style="cursor:pointer">
+            <label for="rule-retroactive" style="font-size:12px;color:var(--muted);cursor:pointer">Also apply to existing transactions (<span id="rule-match-count">0</span> matches)</label>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Rule always applies to future imports automatically.</div>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -3558,12 +3562,49 @@ function parseCC(text) {
     var dm = dateRaw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
     if (!dm) continue;
     var date = dm[3] + '-' + dm[1] + '-' + dm[2];
-    if (amtRaw.startsWith('-')) continue; // payment/credit — skip
-    if (ccCat === 'undefined') continue;  // interest/fees — skip
+    var isNeg = amtRaw.startsWith('-');
     var amt = parseFloat(amtRaw.replace(/[^0-9.]/g, ''));
     if (isNaN(amt) || amt === 0) continue;
-    var cat = resolveCategory(desc, amt);
-    results.push({ date, description: desc.trim().replace(/\s+/g,' ').slice(0,80), category: cat, amount: amt, type: 'expense', account: 'cc', skip: false });
+
+    if (isNeg) {
+      // Payment or credit on CC — this is money flowing INTO the CC (reducing balance)
+      results.push({
+        date: date,
+        description: desc.trim().replace(/\s+/g,' ').slice(0,80),
+        category: 'CC Payment',
+        amount: amt,
+        type: 'transfer',
+        account: 'cc',
+        transferOut: false, // money flowing in to CC = balance reduction
+        ccPayment: true,
+        skip: false,
+        skipReason: 'CC payment/credit'
+      });
+    } else if (ccCat === 'undefined') {
+      // Interest or fees — real expense against the CC
+      results.push({
+        date: date,
+        description: desc.trim().replace(/\s+/g,' ').slice(0,80),
+        category: 'CC Interest & Fees',
+        amount: amt,
+        type: 'expense',
+        account: 'cc',
+        skip: false,
+        skipReason: 'Interest/fees'
+      });
+    } else {
+      // Normal CC purchase
+      var cat = resolveCategory(desc, amt);
+      results.push({
+        date: date,
+        description: desc.trim().replace(/\s+/g,' ').slice(0,80),
+        category: cat,
+        amount: amt,
+        type: 'expense',
+        account: 'cc',
+        skip: false
+      });
+    }
   }
   return results;
 }
@@ -3856,11 +3897,37 @@ function confirmImport() {
     added++;
   });
 
+  // Auto-update CC debt balance when CC payments are imported
+  var ccPayments = toImport.filter(function(r) { return r.ccPayment && !r.skip; });
+  var ccDebtUpdated = 0;
+  if (ccPayments.length > 0 && state.debts && state.debts.length > 0) {
+    var ccDebt = state.debts.find(function(d) { return d.type === 'credit_card'; });
+    if (ccDebt) {
+      var totalPaid = ccPayments.reduce(function(s, r) { return s + r.amount; }, 0);
+      ccDebt.balance = Math.max(0, (ccDebt.balance || 0) - totalPaid);
+      ccDebtUpdated = totalPaid;
+    }
+  }
+
+  // Also detect CC payments from checking side (PNC import with category 'CC Payment')
+  var checkingCCPayments = toImport.filter(function(r) {
+    return r.type === 'transfer' && r.category === 'CC Payment' && r.account === 'checking' && !r.skip;
+  });
+  if (checkingCCPayments.length > 0 && !ccDebtUpdated && state.debts && state.debts.length > 0) {
+    var ccDebt = state.debts.find(function(d) { return d.type === 'credit_card'; });
+    if (ccDebt) {
+      var totalPaid = checkingCCPayments.reduce(function(s, r) { return s + r.amount; }, 0);
+      ccDebt.balance = Math.max(0, (ccDebt.balance || 0) - totalPaid);
+      ccDebtUpdated = totalPaid;
+    }
+  }
+
   saveState();
   closeModal('modal-import');
   resetImport();
   var msg = added + ' imported';
   if (replaced > 0) msg += ', ' + replaced + ' pending → confirmed';
+  if (ccDebtUpdated > 0) msg += ', CC balance reduced by ' + fmtInt(ccDebtUpdated);
   showToast(msg);
   renderPage(currentPage);
 }
@@ -4072,39 +4139,55 @@ function toggleAddRule() {
   form.style.display = isOpen ? 'none' : 'block';
   if (!isOpen) {
     document.getElementById('rule-keyword').value = '';
+    document.getElementById('rule-retroactive').checked = false;
+    document.getElementById('rule-match-count').textContent = '0';
     var sel = document.getElementById('rule-category');
     sel.innerHTML = allCategories().map(function(c) {
       return '<option value="' + c + '">' + c + '</option>';
     }).join('');
-    document.getElementById('rule-keyword').focus();
+    // Live match counter as user types
+    var kwInput = document.getElementById('rule-keyword');
+    kwInput.oninput = function() {
+      var kw = kwInput.value.trim().toUpperCase();
+      if (!kw) { document.getElementById('rule-match-count').textContent = '0'; return; }
+      var count = state.transactions.filter(function(t) {
+        return t.description.toUpperCase().includes(kw);
+      }).length;
+      document.getElementById('rule-match-count').textContent = count;
+    };
+    kwInput.focus();
   }
 }
 
 function saveNewRule() {
   var keyword = document.getElementById('rule-keyword').value.trim().toUpperCase();
   var category = document.getElementById('rule-category').value;
+  var retroactive = document.getElementById('rule-retroactive').checked;
   if (!keyword) { showToast('Enter a keyword'); return; }
   if (!category) { showToast('Select a category'); return; }
 
-  // Save to overrides
+  // Save to overrides — always applies to future imports
   var overrides = loadOverrides();
   overrides[keyword] = category;
   saveOverrides(overrides);
 
-  // Retroactively apply to existing transactions
+  // Only touch existing transactions if checkbox is checked
   var count = 0;
-  state.transactions.forEach(function(t) {
-    if (t.description.toUpperCase().includes(keyword)) {
-      if (t.category === 'Other' || t.category === 'Uncategorized' || !t.category) {
+  if (retroactive) {
+    state.transactions.forEach(function(t) {
+      if (t.description.toUpperCase().includes(keyword)) {
         t.category = category;
         count++;
       }
-    }
-  });
-  saveState();
+    });
+    saveState();
+  }
 
   document.getElementById('add-rule-form').style.display = 'none';
-  showToast('Rule saved: "' + keyword + '" → ' + category + (count > 0 ? ' (' + count + ' transactions updated)' : ''));
+  var msg = 'Rule saved: "' + keyword + '" → ' + category;
+  if (retroactive && count > 0) msg += ' (' + count + ' transactions updated)';
+  else if (!retroactive) msg += ' (future imports only)';
+  showToast(msg);
   renderMisc();
 }
 
