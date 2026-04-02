@@ -1717,25 +1717,46 @@ function nav(page) {
 }
 
 function renderPage(page) {
-  if (page === 'dashboard')    renderDashboard();
-  if (page === 'weekly')       renderWeekly();
-  if (page === 'monthly')      renderMonthly();
-  if (page === 'transactions') renderTxPage();
-  if (page === 'needs')        renderNeeds();
-  if (page === 'wants')        renderWants();
-  if (page === 'subs')         renderSubs();
-  if (page === 'budget')       renderBudgetPlan();
-  if (page === 'roadmap')      renderRoadmap();
-  if (page === 'reports')      renderReports();
-  if (page === 'debts')        renderDebts();
-  if (page === 'daybyday')     renderDayByDay();
-  if (page === 'networth')     renderNetWorth();
-  if (page === 'goals')        renderGoals();
-  if (page === 'calendar')     renderCalendar();
-  if (page === 'alerts')       renderAlerts();
-  if (page === 'recurring')     renderRecurring();
-  if (page === 'misc')          renderMisc();
-  updateAlertBadge();
+  var renders = {
+    'dashboard':    renderDashboard,
+    'weekly':       renderWeekly,
+    'monthly':      renderMonthly,
+    'transactions': renderTxPage,
+    'needs':        renderNeeds,
+    'wants':        renderWants,
+    'subs':         renderSubs,
+    'budget':       renderBudgetPlan,
+    'roadmap':      renderRoadmap,
+    'reports':      renderReports,
+    'debts':        renderDebts,
+    'daybyday':     renderDayByDay,
+    'networth':     renderNetWorth,
+    'goals':        renderGoals,
+    'calendar':     renderCalendar,
+    'alerts':       renderAlerts,
+    'recurring':    renderRecurring,
+    'misc':         renderMisc
+  };
+  if (renders[page]) {
+    try {
+      renders[page]();
+    } catch(e) {
+      console.error('renderPage error on ' + page + ':', e);
+      // Show error on the page so user can report it
+      var pageEl = document.getElementById('page-' + page);
+      if (pageEl) {
+        var errDiv = pageEl.querySelector('.render-error');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.className = 'render-error';
+          errDiv.style.cssText = 'margin:2rem;padding:1rem;background:rgba(192,57,43,.15);border:1px solid var(--red2);border-radius:8px;font-size:12px;color:var(--red2)';
+          pageEl.appendChild(errDiv);
+        }
+        errDiv.textContent = 'Error loading page: ' + e.message + ' (check console for details)';
+      }
+    }
+  }
+  try { updateAlertBadge(); } catch(e) {}
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -5599,10 +5620,10 @@ document.addEventListener('DOMContentLoaded', function() {
     o.addEventListener('click', function(e) { if (e.target === o) o.classList.remove('open'); });
   });
 
-  updateAlertBadge();
-  applyNavCollapsed();
+  try { updateAlertBadge(); } catch(e) { console.error('updateAlertBadge:', e); }
+  try { applyNavCollapsed(); } catch(e) { console.error('applyNavCollapsed:', e); }
   // Auto-connect Dropbox on load
-  DB.init();
+  try { DB.init(); } catch(e) { console.error('DB.init:', e); }
 });
 </script>
 
