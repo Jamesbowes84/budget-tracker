@@ -587,7 +587,7 @@ tbody td.muted { color:var(--muted)!important; }
         <div class="nav-item" onclick="nav('wants')"><span class="nav-icon">◈</span> Wants</div>
         <div class="nav-item" onclick="nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
         <div class="nav-item" onclick="nav('budget')"><span class="nav-icon">≡</span> Plan</div>
-        <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
+        <div class="nav-item" onclick="nav('roadmap')"><span class="nav-icon">→</span> Avalanche</div>
       </div>
     </nav>
 
@@ -726,7 +726,10 @@ tbody td.muted { color:var(--muted)!important; }
           <tbody id="needs-tbl"></tbody>
         </table>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="openAddNeed()">+ Add Line Item</button>
+      <div style="display:flex;gap:8px;margin-top:.5rem">
+        <button class="btn btn-ghost btn-sm" onclick="openAddNeed()">+ Add Line Item</button>
+        <button class="btn btn-ghost btn-sm" onclick="syncAllRecurringToBudget()" title="Create or update budget items from your recurring rules">↻ Sync from Recurring</button>
+      </div>
     </div>
 
     <!-- WANTS -->
@@ -776,29 +779,68 @@ tbody td.muted { color:var(--muted)!important; }
       <div id="budget-plan-content"></div>
     </div>
 
-    <!-- ROADMAP -->
+    <!-- AVALANCHE PLANNER -->
     <div class="page" id="page-roadmap">
-      <div class="page-title">Roadmap</div>
-      <div class="page-sub">Where this goes if you stick to it</div>
-      <div class="section">
-        <div class="tbl-wrap" style="padding:1.25rem">
-          <div class="roadmap" id="roadmap-items"></div>
+      <div class="page-title">Avalanche Planner</div>
+      <div class="page-sub">Highest rate first — pay minimums on everything else, throw extra at #1. When it's gone, cascade.</div>
+
+      <!-- Controls -->
+      <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1.25rem;border-color:var(--teal)">
+        <div style="display:flex;gap:1.5rem;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="max-width:200px">
+            <label class="form-label">Total monthly debt budget ($)</label>
+            <input class="form-input" id="av-budget" type="number" step="1" placeholder="1940" oninput="renderAvalanche()">
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Min payments total: <span id="av-min-total">—</span></div>
+          </div>
+          <div class="form-group" style="max-width:160px">
+            <label class="form-label">Extra/mo above mins ($)</label>
+            <div class="form-input" id="av-extra-display" style="background:transparent;border:none;padding:9px 0;font-weight:700;color:var(--teal2)">—</div>
+          </div>
+          <div style="display:flex;gap:8px;align-self:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="avSetBudget('current')" style="font-size:11px">Use current</button>
+            <button class="btn btn-ghost btn-sm" onclick="avSetBudget('min')" style="font-size:11px">Mins only</button>
+          </div>
         </div>
       </div>
+
+      <!-- Summary cards -->
+      <div class="cards-grid" id="av-cards"></div>
+
+      <!-- Cascade timeline -->
       <div class="section">
-        <div class="section-hdr"><div class="section-title">CC Payoff tracker</div></div>
-        <div class="cards-grid-3">
-          <div class="stat-card bad"><div class="stat-label">CC Balance</div><div class="stat-val" id="cc-balance">—</div><div class="stat-note">~24% APR</div></div>
-          <div class="stat-card neutral"><div class="stat-label">Monthly Payment</div><div class="stat-val">$530</div><div class="stat-note">Auto-pay target</div></div>
-          <div class="stat-card good"><div class="stat-label">Payoff Month</div><div class="stat-val" id="cc-payoff-month">—</div><div class="stat-note">At current rate</div></div>
+        <div class="section-hdr"><div class="section-title">Payoff cascade</div></div>
+        <div class="tbl-wrap" style="padding:1.25rem">
+          <div id="av-cascade"></div>
         </div>
-        <div class="progress-wrap">
-          <div class="progress-label"><span>Paid down</span><span id="cc-pct">0%</span></div>
-          <div class="progress-track"><div class="progress-fill fill-good" id="cc-progress" style="width:0%"></div></div>
+      </div>
+
+      <!-- Comparison: avalanche vs minimum -->
+      <div class="cards-grid-2">
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Avalanche strategy</div></div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Debt</th><th class="r">Payoff</th><th class="r">Interest</th></tr></thead>
+              <tbody id="av-avalanche-tbl"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Update CC balance</label><input class="form-input" id="cc-balance-input" type="number" placeholder="Current balance"></div>
-          <button class="btn btn-primary" onclick="updateCCBalance()" style="margin-bottom:0;align-self:flex-end">Update</button>
+        <div class="section">
+          <div class="section-hdr"><div class="section-title">Minimums only (comparison)</div></div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Debt</th><th class="r">Payoff</th><th class="r">Interest</th></tr></thead>
+              <tbody id="av-minimum-tbl"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="section">
+        <div class="section-hdr"><div class="section-title">Balance projection</div></div>
+        <div class="tbl-wrap" style="padding:1.25rem">
+          <canvas id="av-chart" height="200"></canvas>
         </div>
       </div>
     </div>
@@ -1689,6 +1731,20 @@ tbody td.muted { color:var(--muted)!important; }
       <button class="btn btn-danger btn-sm" id="rec-delete-btn" onclick="deleteRecurring()" style="display:none">Delete</button>
       <button class="btn btn-ghost" onclick="closeModal('modal-recurring')">Cancel</button>
       <button class="btn btn-primary" onclick="saveRecurring()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC CONFLICTS MODAL -->
+<div class="modal-overlay" id="modal-sync">
+  <div class="modal" style="width:640px;max-height:90vh">
+    <div class="modal-title">Sync Conflicts</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">These budget items have different amounts than their recurring rules. Pick which value to keep for each.</div>
+    <div style="max-height:400px;overflow-y:auto" id="sync-conflicts-list"></div>
+    <div id="sync-new-items" style="margin-top:1rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sync')">Cancel</button>
+      <button class="btn btn-primary" onclick="applySyncChoices()">Apply</button>
     </div>
   </div>
 </div>
@@ -2698,34 +2754,244 @@ function renderBudgetPlan() {
 
 // ─── ROADMAP ──────────────────────────────────────────────────────────────────
 
-function renderRoadmap() {
-  var html = state.roadmap.map(r => '<div class="rm-item"><div class="rm-dot ' + r.status + '"></div><div class="rm-when">' + r.when + '</div><div class="rm-body"><div class="rm-title">' + r.title + '</div><div class="rm-note">' + r.note + '</div></div></div>').join('');
-  document.getElementById('roadmap-items').innerHTML = html;
+function renderRoadmap() { renderAvalanche(); }
 
-  // CC tracker
-  var orig = state.ccOriginal || 5000;
-  var bal = state.ccBalance || 0;
-  var paid = orig - bal;
-  var pct = Math.round(paid/orig*100);
-  document.getElementById('cc-balance').textContent = fmtInt(bal);
-  document.getElementById('cc-pct').textContent = pct + '%';
-  document.getElementById('cc-progress').style.width = Math.max(0,pct) + '%';
+function avSetBudget(mode) {
+  var input = document.getElementById('av-budget');
+  if (mode === 'current') {
+    var total = (state.debts||[]).reduce(function(s,d){ return s + (d.payment||0); }, 0);
+    input.value = total;
+  } else if (mode === 'min') {
+    var total = (state.debts||[]).reduce(function(s,d){ return s + (d.minPayment||d.payment||0); }, 0);
+    input.value = total;
+  }
+  renderAvalanche();
+}
 
-  // Estimate payoff month
-  var monthsLeft = bal > 0 ? Math.ceil(bal / 430) : 0;
-  var payoffDate = new Date();
-  payoffDate.setMonth(payoffDate.getMonth() + monthsLeft);
-  document.getElementById('cc-payoff-month').textContent = monthsLeft > 0 ? monthStr(payoffDate.getFullYear(), payoffDate.getMonth()) : 'PAID OFF!';
-  document.getElementById('cc-balance-input').value = bal;
+// Run the full avalanche simulation
+function runAvalanche(debts, monthlyBudget) {
+  if (!debts.length || monthlyBudget <= 0) return { months: 0, events: [], totalInterest: 0, timeline: [], debtResults: [] };
+
+  // Deep copy and sort by rate desc
+  var ds = debts.map(function(d) {
+    return { name: d.name, balance: d.balance||0, rate: d.rate||0, min: d.minPayment||d.payment||0, payment: d.payment||0, interestPaid: 0, paidOffMonth: 0 };
+  }).sort(function(a,b){ return b.rate - a.rate; });
+
+  var events = [];
+  var timeline = []; // {month, balances[]}
+  var month = 0;
+  var maxMonths = 360; // 30 year cap
+
+  while (month < maxMonths) {
+    var allPaid = ds.every(function(d){ return d.balance <= 0; });
+    if (allPaid) break;
+
+    month++;
+    var remaining = monthlyBudget;
+
+    // 1. Apply interest to all debts
+    ds.forEach(function(d) {
+      if (d.balance <= 0) return;
+      var interest = d.balance * (d.rate / 100 / 12);
+      d.balance += interest;
+      d.interestPaid += interest;
+    });
+
+    // 2. Pay minimums first
+    ds.forEach(function(d) {
+      if (d.balance <= 0) return;
+      var pay = Math.min(d.min, d.balance, remaining);
+      d.balance -= pay;
+      remaining -= pay;
+    });
+
+    // 3. Throw remaining at highest-rate debt with balance > 0
+    for (var i = 0; i < ds.length; i++) {
+      if (ds[i].balance > 0 && remaining > 0) {
+        var pay = Math.min(ds[i].balance, remaining);
+        ds[i].balance -= pay;
+        remaining -= pay;
+
+        if (ds[i].balance <= 0.01) {
+          ds[i].balance = 0;
+          ds[i].paidOffMonth = month;
+          var freedAmt = ds[i].min;
+          var nextDebt = ds.find(function(x){ return x.balance > 0; });
+          events.push({
+            month: month,
+            name: ds[i].name,
+            freed: freedAmt,
+            rollsTo: nextDebt ? nextDebt.name : null,
+            totalFreed: ds.filter(function(x){ return x.balance <= 0; }).reduce(function(s,x){ return s + x.min; }, 0)
+          });
+        }
+        break; // only target one debt at a time
+      }
+    }
+
+    // Snapshot every 3 months for chart
+    if (month % 3 === 0 || month <= 6) {
+      timeline.push({
+        month: month,
+        balances: ds.map(function(d){ return { name: d.name, balance: Math.max(0, d.balance) }; }),
+        total: ds.reduce(function(s,d){ return s + Math.max(0, d.balance); }, 0)
+      });
+    }
+  }
+
+  return {
+    months: month,
+    events: events,
+    totalInterest: Math.round(ds.reduce(function(s,d){ return s + d.interestPaid; }, 0)),
+    debtResults: ds.map(function(d){ return { name: d.name, paidOffMonth: d.paidOffMonth, interest: Math.round(d.interestPaid) }; }),
+    timeline: timeline
+  };
+}
+
+// Run minimum-only simulation for comparison
+function runMinimums(debts) {
+  if (!debts.length) return { months: 0, totalInterest: 0, debtResults: [] };
+  var ds = debts.map(function(d) {
+    return { name: d.name, balance: d.balance||0, rate: d.rate||0, min: d.minPayment||d.payment||0, interestPaid: 0, paidOffMonth: 0 };
+  });
+  var month = 0;
+  while (month < 360) {
+    if (ds.every(function(d){ return d.balance <= 0; })) break;
+    month++;
+    ds.forEach(function(d) {
+      if (d.balance <= 0) return;
+      var interest = d.balance * (d.rate / 100 / 12);
+      d.balance += interest;
+      d.interestPaid += interest;
+      var pay = Math.min(d.min, d.balance);
+      d.balance -= pay;
+      if (d.balance <= 0.01) { d.balance = 0; d.paidOffMonth = month; }
+    });
+  }
+  return {
+    months: month,
+    totalInterest: Math.round(ds.reduce(function(s,d){ return s + d.interestPaid; }, 0)),
+    debtResults: ds.map(function(d){ return { name: d.name, paidOffMonth: d.paidOffMonth, interest: Math.round(d.interestPaid) }; })
+  };
+}
+
+function monthFromNow(m) {
+  var d = new Date();
+  d.setMonth(d.getMonth() + m);
+  return monthStr(d.getFullYear(), d.getMonth());
+}
+
+function renderAvalanche() {
+  initDebts();
+  var debts = (state.debts||[]).filter(function(d){ return (d.balance||0) > 0; });
+  if (debts.length === 0) {
+    var cards = document.getElementById('av-cards');
+    if (cards) cards.innerHTML = '<div class="stat-card good" style="grid-column:span 4"><div class="stat-val" style="font-size:18px">No active debts — you\'re free!</div></div>';
+    return;
+  }
+
+  var totalMin = debts.reduce(function(s,d){ return s + (d.minPayment||d.payment||0); }, 0);
+  var totalPlanned = debts.reduce(function(s,d){ return s + (d.payment||0); }, 0);
+
+  // Get budget from input or use planned total
+  var budgetInput = document.getElementById('av-budget');
+  var budget = parseFloat(budgetInput.value) || totalPlanned;
+  if (!budgetInput.value) budgetInput.value = totalPlanned;
+
+  var extra = Math.max(0, budget - totalMin);
+  document.getElementById('av-min-total').textContent = fmtInt(totalMin);
+  document.getElementById('av-extra-display').textContent = extra > 0 ? '+' + fmtInt(extra) + '/mo' : '$0';
+
+  // Run both simulations
+  var avalanche = runAvalanche(debts, budget);
+  var minimums  = runMinimums(debts);
+  var saved = minimums.totalInterest - avalanche.totalInterest;
+  var monthsSaved = minimums.months - avalanche.months;
+
+  // Summary cards
+  var cards = document.getElementById('av-cards');
+  if (cards) cards.innerHTML = [
+    { label: 'Debt-free in', val: avalanche.months + ' months', note: monthFromNow(avalanche.months), cls: 'good' },
+    { label: 'Total interest', val: fmtInt(avalanche.totalInterest), note: 'vs ' + fmtInt(minimums.totalInterest) + ' at minimums', cls: avalanche.totalInterest < minimums.totalInterest ? 'good' : 'neutral' },
+    { label: 'Interest saved', val: fmtInt(saved), note: monthsSaved + ' months sooner', cls: saved > 0 ? 'good' : 'neutral' },
+    { label: 'Extra/mo toward debt', val: extra > 0 ? fmtInt(extra) : '$0', note: extra > 0 ? 'Above minimum payments' : 'Paying minimums only', cls: extra > 0 ? 'good' : 'warn' },
+  ].map(function(c){
+    return '<div class="stat-card ' + c.cls + '"><div class="stat-label">' + c.label + '</div><div class="stat-val">' + c.val + '</div><div class="stat-note">' + c.note + '</div></div>';
+  }).join('');
+
+  // Cascade timeline
+  var cascade = document.getElementById('av-cascade');
+  if (cascade) {
+    if (avalanche.events.length === 0) {
+      cascade.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:1rem">Increase your debt budget above minimums to see the avalanche cascade effect.</div>';
+    } else {
+      cascade.innerHTML = '<div class="roadmap">' + avalanche.events.map(function(e, i) {
+        var dotClass = i === 0 ? 'active' : 'future';
+        return '<div class="rm-item">' +
+          '<div class="rm-dot ' + dotClass + '"></div>' +
+          '<div class="rm-when">Month ' + e.month + '<div style="font-size:10px;color:var(--muted)">' + monthFromNow(e.month) + '</div></div>' +
+          '<div>' +
+            '<div class="rm-title" style="color:var(--teal2)">' + e.name + ' paid off!</div>' +
+            '<div class="rm-note">' +
+              fmtInt(e.freed) + '/mo freed' +
+              (e.rollsTo ? ' → rolls to <strong>' + e.rollsTo + '</strong>' : ' → all debt cleared!') +
+              '<br><span style="color:var(--teal2)">' + fmtInt(e.totalFreed) + '/mo total extra</span> now targeting next debt' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+  }
+
+  // Side-by-side tables
+  function fillTable(results, tbodyId) {
+    var tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    var totalInt = 0;
+    tbody.innerHTML = results.debtResults.map(function(d) {
+      totalInt += d.interest;
+      return '<tr><td>' + d.name + '</td><td class="r" style="color:var(--teal2)">' + (d.paidOffMonth > 0 ? monthFromNow(d.paidOffMonth) : 'Never') + '</td><td class="r" style="font-family:var(--mono);color:' + (d.interest > 1000 ? 'var(--red2)' : 'var(--muted)') + '">' + fmtInt(d.interest) + '</td></tr>';
+    }).join('') +
+    '<tr class="total-row"><td>Total</td><td class="r">' + results.months + ' months</td><td class="r" style="font-family:var(--mono)">' + fmtInt(totalInt) + '</td></tr>';
+  }
+  fillTable(avalanche, 'av-avalanche-tbl');
+  fillTable(minimums, 'av-minimum-tbl');
+
+  // Chart
+  destroyChart('av');
+  var ctx = document.getElementById('av-chart');
+  if (ctx && avalanche.timeline.length > 1) {
+    var labels = avalanche.timeline.map(function(t) { return 'Mo ' + t.month; });
+    var datasets = debts.map(function(d, i) {
+      return {
+        label: d.name,
+        data: avalanche.timeline.map(function(t) {
+          var match = t.balances.find(function(b){ return b.name === d.name; });
+          return match ? Math.round(match.balance) : 0;
+        }),
+        borderColor: PALETTE[i % PALETTE.length],
+        backgroundColor: 'transparent',
+        borderWidth: 2, tension: 0.4, pointRadius: 2, fill: false
+      };
+    });
+    // Add total line
+    datasets.push({
+      label: 'Total debt',
+      data: avalanche.timeline.map(function(t){ return Math.round(t.total); }),
+      borderColor: '#F4F6F8', backgroundColor: 'transparent',
+      borderWidth: 2.5, borderDash: [5,3], tension: 0.4, pointRadius: 0
+    });
+    try { rptCharts['av'] = new Chart(ctx, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: { responsive: true, plugins: { legend: { position:'bottom', labels:{font:{size:11},boxWidth:12,padding:12,color:'#8A9BAE'}}}, scales: { x:{grid:{display:false},ticks:{font:{size:10},color:'#8A9BAE'}}, y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{font:{size:10},color:'#8A9BAE',callback:function(v){return '$'+Math.round(v/1000)+'k';}}}}}
+    }); } catch(e) { console.warn('Chart error:', e); }
+  }
 }
 
 function updateCCBalance() {
-  var val = parseFloat(document.getElementById('cc-balance-input').value);
-  if (isNaN(val) || val < 0) return;
-  state.ccBalance = val;
-  saveState();
-  renderRoadmap();
-  showToast('CC balance updated');
+  // Legacy — kept for compatibility but CC balance now lives on Debts page
+  renderAvalanche();
 }
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
@@ -4592,10 +4858,189 @@ function saveRecurring() {
   if (idx === -1) state.recurring.push(rule);
   else state.recurring[idx] = rule;
 
+  // Auto-sync: update matching budget item if one exists
+  if (billType !== 'income' && active) {
+    syncRecurringToBudget(rule);
+  }
+
   saveState();
   closeModal('modal-recurring');
   showToast(idx === -1 ? 'Rule added' : 'Rule updated');
   renderRecurring();
+}
+
+// Compute monthly amount from a recurring rule's schedule + amount
+function recurringMonthlyAmt(rule) {
+  var factor = { monthly:1, biweekly:2.17, weekly:4.33, bimonthly:2, semiannual:1/6, annual:1/12 }[rule.schedule] || 1;
+  return Math.round(rule.amount * factor);
+}
+
+// Map recurring schedule to budget frequency
+function recurringToFreq(schedule) {
+  return { monthly:'monthly', biweekly:'biweekly', weekly:'weekly', bimonthly:'monthly', semiannual:'semiannual', annual:'annual' }[schedule] || 'monthly';
+}
+
+// Sync a single recurring rule to its matching budget item
+function syncRecurringToBudget(rule) {
+  var cat = rule.category || rule.name;
+  var monthlyAmt = recurringMonthlyAmt(rule);
+  var freq = recurringToFreq(rule.schedule);
+  var rawAmt = (freq === 'monthly' && rule.schedule === 'bimonthly') ? monthlyAmt : rule.amount;
+
+  // Find matching needs item by name or category
+  var match = state.needs.find(function(n) {
+    return n.name === rule.name || n.name === cat;
+  });
+  if (match) {
+    match.amt = monthlyAmt;
+    match.rawAmt = rawAmt;
+    match.freq = freq;
+  }
+  // Also check wants
+  var wMatch = state.wants.find(function(w) {
+    return w.name === rule.name || w.name === cat;
+  });
+  if (wMatch) {
+    wMatch.amt = monthlyAmt;
+    wMatch.rawAmt = rawAmt;
+    wMatch.freq = freq;
+  }
+}
+
+// Bulk sync — collect conflicts, show modal for user to choose
+var _pendingSync = { conflicts: [], newItems: [] };
+
+function syncAllRecurringToBudget() {
+  initRecurring();
+  var conflicts = [];
+  var newItems = [];
+  var upToDate = 0;
+
+  state.recurring.forEach(function(rule) {
+    if (rule.billType === 'income' || !rule.active) return;
+
+    var monthlyAmt = recurringMonthlyAmt(rule);
+    var freq = recurringToFreq(rule.schedule);
+    var rawAmt = (freq === 'monthly' && rule.schedule === 'bimonthly') ? monthlyAmt : rule.amount;
+    var cat = rule.category || rule.name;
+
+    var needMatch = state.needs.find(function(n) { return n.name === rule.name || n.name === cat; });
+    var wantMatch = state.wants.find(function(w) { return w.name === rule.name || w.name === cat; });
+    var match = needMatch || wantMatch;
+    var matchType = needMatch ? 'need' : (wantMatch ? 'want' : null);
+    var matchIdx = needMatch ? state.needs.indexOf(needMatch) : (wantMatch ? state.wants.indexOf(wantMatch) : -1);
+
+    if (match) {
+      if (match.amt !== monthlyAmt) {
+        conflicts.push({
+          name: rule.name, budgetAmt: match.amt, budgetFreq: match.freq || 'monthly',
+          recurringAmt: monthlyAmt, recurringRawAmt: rawAmt, recurringFreq: freq,
+          schedule: scheduleLabel(rule), matchType: matchType, matchIdx: matchIdx,
+          choice: 'recurring'
+        });
+      } else { upToDate++; }
+    } else {
+      newItems.push({ name: rule.name, monthlyAmt: monthlyAmt, rawAmt: rawAmt, freq: freq, schedule: scheduleLabel(rule) });
+    }
+  });
+
+  if (conflicts.length === 0 && newItems.length === 0) {
+    showToast('Everything in sync — ' + upToDate + ' items matched');
+    return;
+  }
+
+  _pendingSync = { conflicts: conflicts, newItems: newItems };
+
+  // No conflicts? Just apply new items directly
+  if (conflicts.length === 0) { applySyncChoices(); return; }
+
+  // Build conflict UI
+  var html = conflicts.map(function(c, i) {
+    return '<div style="padding:.75rem 0;border-bottom:1px solid var(--border)">' +
+      '<div style="font-size:13px;font-weight:600;margin-bottom:6px">' + c.name + '</div>' +
+      '<div style="display:flex;gap:12px;align-items:center">' +
+        '<label style="flex:1;cursor:pointer;padding:8px 12px;border-radius:8px;border:2px solid var(--border);transition:all .15s" id="sync-budget-' + i + '" onclick="setSyncChoice(' + i + ',\'budget\')">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Keep budget value</div>' +
+          '<div style="font-family:var(--mono);font-size:15px;font-weight:700">' + fmtInt(c.budgetAmt) + '<span style="font-size:11px;color:var(--muted)">/mo</span></div>' +
+        '</label>' +
+        '<span style="color:var(--muted);font-size:18px">→</span>' +
+        '<label style="flex:1;cursor:pointer;padding:8px 12px;border-radius:8px;border:2px solid var(--teal);background:rgba(11,181,137,.06);transition:all .15s" id="sync-recurring-' + i + '" onclick="setSyncChoice(' + i + ',\'recurring\')">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Use recurring (' + c.schedule + ')</div>' +
+          '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--teal2)">' + fmtInt(c.recurringAmt) + '<span style="font-size:11px;color:var(--muted)">/mo</span></div>' +
+          (c.recurringFreq !== 'monthly' ? '<div style="font-size:10px;color:var(--muted)">' + fmtInt(c.recurringRawAmt) + ' ' + freqLabel(c.recurringFreq) + '</div>' : '') +
+        '</label>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('sync-conflicts-list').innerHTML = html;
+
+  // New items
+  if (newItems.length > 0) {
+    document.getElementById('sync-new-items').innerHTML =
+      '<div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--teal2)">' + newItems.length + ' new items to create:</div>' +
+      newItems.map(function(n, i) {
+        return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">' +
+          '<input type="checkbox" checked id="sync-new-' + i + '" style="cursor:pointer">' +
+          '<span style="flex:1;color:var(--white)">' + n.name + '</span>' +
+          '<span style="font-family:var(--mono);color:var(--muted)">' + fmtInt(n.monthlyAmt) + '/mo</span>' +
+          '<span style="font-size:10px;color:var(--muted)">' + n.schedule + '</span>' +
+        '</div>';
+      }).join('');
+  } else {
+    document.getElementById('sync-new-items').innerHTML = '';
+  }
+
+  document.getElementById('modal-sync').classList.add('open');
+}
+
+function setSyncChoice(idx, choice) {
+  _pendingSync.conflicts[idx].choice = choice;
+  var bEl = document.getElementById('sync-budget-' + idx);
+  var rEl = document.getElementById('sync-recurring-' + idx);
+  if (choice === 'budget') {
+    bEl.style.borderColor = 'var(--teal)'; bEl.style.background = 'rgba(11,181,137,.06)';
+    rEl.style.borderColor = 'var(--border)'; rEl.style.background = 'transparent';
+  } else {
+    rEl.style.borderColor = 'var(--teal)'; rEl.style.background = 'rgba(11,181,137,.06)';
+    bEl.style.borderColor = 'var(--border)'; bEl.style.background = 'transparent';
+  }
+}
+
+function applySyncChoices() {
+  var updated = 0, created = 0, kept = 0;
+
+  _pendingSync.conflicts.forEach(function(c) {
+    if (c.choice === 'recurring') {
+      var arr = c.matchType === 'need' ? state.needs : state.wants;
+      if (arr[c.matchIdx]) {
+        arr[c.matchIdx].amt = c.recurringAmt;
+        arr[c.matchIdx].rawAmt = c.recurringRawAmt;
+        arr[c.matchIdx].freq = c.recurringFreq;
+        updated++;
+      }
+    } else { kept++; }
+  });
+
+  _pendingSync.newItems.forEach(function(n, i) {
+    var cb = document.getElementById('sync-new-' + i);
+    if (cb && !cb.checked) return;
+    state.needs.push({
+      name: n.name, amt: n.monthlyAmt, rawAmt: n.rawAmt, freq: n.freq,
+      notes: 'From recurring: ' + n.schedule, group: 'Other'
+    });
+    created++;
+  });
+
+  saveState();
+  closeModal('modal-sync');
+  var msg = [];
+  if (updated) msg.push(updated + ' updated from recurring');
+  if (kept) msg.push(kept + ' kept at budget value');
+  if (created) msg.push(created + ' created');
+  showToast(msg.join(', '));
+  _pendingSync = { conflicts: [], newItems: [] };
+  renderPage(currentPage);
 }
 
 function deleteRecurring() {
@@ -6444,7 +6889,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('wants')"><span class="nav-icon">◉</span> Wants Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('subs')"><span class="nav-icon">↻</span> Subscriptions</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('budget')"><span class="nav-icon">≡</span> Budget Plan</div>
-      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('roadmap')"><span class="nav-icon">→</span> Roadmap</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('roadmap')"><span class="nav-icon">→</span> Avalanche</div>
       <div style="height:1px;background:var(--border);margin:.5rem 0"></div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');openImport()"><span class="nav-icon">⬆</span> Import CSV</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');exportData()"><span class="nav-icon">↓</span> Backup</div>
