@@ -47,22 +47,28 @@ body{
 }
 
 /* ─── LAYOUT ────────────────────────────────────────────────────── */
-.app{display:block}
-
-/* SIDEBAR */
-.sidebar{
+html, body { height:100%; margin:0; overflow:hidden; }
+.app { display:flex; height:100%; }
+.sidebar {
   width:220px;
+  flex-shrink:0;
   background:var(--navy2);
   border-right:1px solid var(--border);
   display:flex;
   flex-direction:column;
   padding:1.5rem 0;
-  position:fixed;
-  top:0;
-  left:0;
-  height:100vh;
-  z-index:40;
+  height:100%;
   overflow:hidden;
+  z-index:40;
+}
+main {
+  flex:1;
+  min-width:0;
+  height:100%;
+  overflow-y:auto;
+  padding:2rem;
+  background:var(--navy);
+  box-sizing:border-box;
 }
 .sidebar-logo{
   padding:0 1.25rem 1.5rem;
@@ -102,7 +108,7 @@ body{
 }
 
 /* MAIN */
-.main{position:fixed;top:0;left:220px;right:0;bottom:0;overflow-y:auto;padding:2rem;background:var(--navy)}
+
 .page{display:none}
 .page.active{display:block}
 
@@ -884,7 +890,7 @@ select.form-input option{background:var(--navy2);color:var(--white)}
       <div class="page-sub">Running cash balance — every dollar in and out</div>
 
       <!-- Setup bar -->
-      <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1rem">
+      <div class="tbl-wrap" style="padding:1rem 1.25rem;margin-bottom:1rem;border-color:var(--teal)">
         <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
           <div class="form-group" style="max-width:200px">
             <label class="form-label">Checking balance ($)</label>
@@ -1737,11 +1743,15 @@ function nav(page) {
     }
   });
   currentPage = page;
-  // Scroll main back to top on every navigation
+  renderPage(page);
+  // Scroll main back to top AFTER rendering - use timeout to ensure DOM is settled
   var mainEl = document.querySelector('main');
   if (mainEl) mainEl.scrollTop = 0;
   window.scrollTo(0, 0);
-  renderPage(page);
+  setTimeout(function() {
+    if (mainEl) mainEl.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, 50);
 }
 
 function renderPage(page) {
@@ -1823,10 +1833,10 @@ function txInWeek(tx) {
 
 function allCategories() {
   var cats = [];
-  state.needs.forEach(function(n) { if (!cats.includes(n.name)) cats.push(n.name); });
-  state.wants.forEach(function(w) { if (!cats.includes(w.name)) cats.push(w.name); });
-  cats.push('Income');
-  cats.push('Uncategorized');
+  (state.needs||[]).forEach(function(n) { if (n.name && !cats.includes(n.name)) cats.push(n.name); });
+  (state.wants||[]).forEach(function(w) { if (w.name && !cats.includes(w.name)) cats.push(w.name); });
+  if (!cats.includes('Income')) cats.push('Income');
+  if (!cats.includes('Uncategorized')) cats.push('Uncategorized');
   return cats;
 }
 
@@ -3722,8 +3732,7 @@ function undoLastRule() {
 var DEFAULT_RECURRING = [];  // Personal rules live in Dropbox — not hardcoded
 
 function initRecurring() {
-  // state.recurring is initialized in loadState
-  // DEFAULT_RECURRING is empty - personal rules come from Dropbox backup
+  if (!state.recurring) state.recurring = [];
 }
 
 // ── SCHEDULE ENGINE — does this rule fire on dateStr? ────────────────────────
@@ -5023,10 +5032,7 @@ function deleteDayItem() {
 // ─── DEBTS ────────────────────────────────────────────────────────────────────
 
 function initDebts() {
-  if (!state.debts) {
-    state.debts = [];
-    saveState();
-  }
+  if (!state.debts) state.debts = [];
 }
 
 function debtTypeLabel(t) {
@@ -5630,10 +5636,27 @@ function actualOrExpectedIncome(year, month) {
     .reduce(function(s,t){ return s + parseFloat(t.amount||0); }, 0);
   return actual > 0 ? actual : expectedIncomeForMonth(year, month);
 }
+
+// ── STATE SAFETY ─────────────────────────────────────────────────────────────
+function ensureState() {
+  if (!state.needs)        state.needs = [];
+  if (!state.wants)        state.wants = [];
+  if (!state.transactions) state.transactions = [];
+  if (!state.recurring)    state.recurring = [];
+  if (!state.debts)        state.debts = [];
+  if (!state.goals)        state.goals = [];
+  if (!state.assets)       state.assets = [];
+  if (!state.nwHistory)    state.nwHistory = [];
+  if (!state.dayItems)     state.dayItems = [];
+  if (!state.dbdSettings)  state.dbdSettings = {};
+  if (!state.subscriptions) state.subscriptions = [];
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
   loadState();
+  ensureState();
   // Update logo from state if user has set their name
   if (state.ownerName) {
     var el = document.getElementById('app-owner');
