@@ -1179,6 +1179,34 @@ tbody td.muted { color:var(--muted)!important; }
     </div>
 
   
+    <!-- CATEGORIES & GROUPS -->
+    <div class="page" id="page-categories">
+      <div class="page-title">Categories & Groups</div>
+      <div class="page-sub">Manage spend categories, groups (need/want), and auto-categorization keywords</div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Groups</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddGroup()">+ Add Group</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Group</th><th>Type</th><th class="r">Categories</th><th></th></tr></thead>
+          <tbody id="groups-tbl"></tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Categories</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddCategory()">+ Add Category</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Category</th><th>Group</th><th>Keywords</th><th class="r">Transactions</th><th></th></tr></thead>
+          <tbody id="categories-tbl"></tbody>
+        </table></div>
+      </div>
+    </div>
+
     <!-- MISC / UNCATEGORIZED REVIEW -->
     <div class="page" id="page-misc">
       <div class="page-title">Uncategorized Review</div>
@@ -1713,15 +1741,56 @@ tbody td.muted { color:var(--muted)!important; }
   </div>
 </div>
 
-<!-- BUDGET SYNC MODAL -->
-<div class="modal-overlay" id="modal-sync">
-  <div class="modal" style="width:720px;max-height:90vh">
-    <div class="modal-title">Budget Sync</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">Match recurring rules to budget items. Amounts sync from recurring → budget.</div>
-    <div style="max-height:500px;overflow-y:auto" id="sync-match-list"></div>
+
+<!-- CATEGORY EDIT MODAL -->
+<div class="modal-overlay" id="modal-category">
+  <div class="modal" style="width:460px">
+    <div class="modal-title" id="modal-category-title">Edit Category</div>
+    <input type="hidden" id="edit-cat-idx">
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="cat-edit-name" placeholder="e.g. Electric, Dining Out">
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Group</label>
+      <select class="form-input" id="cat-edit-group"></select>
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Keywords (one per line — used for auto-categorization)</label>
+      <textarea class="form-input" id="cat-edit-keywords" rows="4" placeholder="CHIPOTLE&#10;MCDONALD&#10;BURGER KING" style="resize:vertical;font-family:var(--mono);font-size:12px"></textarea>
+    </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-sync')">Cancel</button>
-      <button class="btn btn-primary" onclick="applySyncMatches()">Apply Sync</button>
+      <button class="btn btn-danger btn-sm" id="cat-delete-btn" onclick="deleteCategory()" style="display:none">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-category')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCategory()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP EDIT MODAL -->
+<div class="modal-overlay" id="modal-group">
+  <div class="modal" style="width:400px">
+    <div class="modal-title" id="modal-group-title">Edit Group</div>
+    <input type="hidden" id="edit-grp-idx">
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="grp-edit-name" placeholder="e.g. Housing, Transport">
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Type</label>
+      <div style="display:flex;gap:12px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="grp-type" id="grp-type-need" value="need"> Need
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="grp-type" id="grp-type-want" value="want"> Want
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="grp-delete-btn" onclick="deleteGroup()" style="display:none">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-group')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGroup()">Save</button>
     </div>
   </div>
 </div>
@@ -2187,6 +2256,14 @@ function txInWeek(tx) {
 }
 
 function allCategories() {
+  // Read from state.categories if populated (v2)
+  if (state.categories && state.categories.length > 0) {
+    var cats = state.categories.map(function(c) { return c.name; });
+    if (cats.indexOf('Income') === -1) cats.push('Income');
+    if (cats.indexOf('Uncategorized') === -1) cats.push('Uncategorized');
+    return cats.sort(function(a, b) { return a.localeCompare(b); });
+  }
+  // Fallback to old method
   var cats = [];
   // Primary source: state.categories (v2)
   if (state.categories && state.categories.length > 0) {
@@ -2774,6 +2851,34 @@ function renderDashboard() {
     '</div>';
   }).join('');
 
+  // This Month summary — period-aware
+  var _thisMonthItems = getRecurringForMonth(y, m);
+  var _paydays = _thisMonthItems.filter(function(i) { return i.type === 'income'; });
+  var _bills = _thisMonthItems.filter(function(i) { return i.type !== 'income'; });
+  var _paydayTotal = _paydays.reduce(function(s,i){ return s + Math.abs(i.amount); }, 0);
+  var _billsTotal = _bills.reduce(function(s,i){ return s + Math.abs(i.amount); }, 0);
+  var _monthFree = _paydayTotal - _billsTotal;
+  var monthSummary = document.getElementById('dash-events');
+  if (monthSummary && _paydays.length > 0) {
+    var wantBills = _bills.filter(function(b) {
+      var cat = catByName(b.category);
+      if (!cat || !cat.groupId) return false;
+      var grp = groupById(cat.groupId);
+      return grp && grp.type === 'want';
+    });
+    var wantTotal = wantBills.reduce(function(s,b){ return s + Math.abs(b.amount); },0);
+    var needTotal = _billsTotal - wantTotal;
+    monthSummary.style.display = 'block';
+    monthSummary.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;align-items:center">' +
+      '<span style="font-weight:600;color:var(--white)">' + label + '</span>' +
+      '<span>' + _paydays.length + ' payday' + (_paydays.length>1?'s':'') + ' <span style="color:var(--teal2);font-family:var(--mono)">' + fmtInt(_paydayTotal) + '</span></span>' +
+      '<span>' + fmtInt(needTotal) + ' needs</span>' +
+      '<span>' + fmtInt(wantTotal) + ' wants</span>' +
+      '<span style="color:' + (_monthFree >= 0 ? 'var(--teal2)' : 'var(--red2)') + ';font-family:var(--mono);font-weight:600">' + fmtInt(Math.abs(_monthFree)) + ' ' + (_monthFree >= 0 ? 'free' : 'short') + '</span>' +
+      (_paydays.length >= 3 ? '<span class="badge badge-good">3-paycheck month!</span>' : '') +
+    '</div>';
+  }
+
   // Progress bars — grouped and collapsible
   var prog = document.getElementById('dash-progress');
   if (prog) prog.innerHTML = renderGroupedProgress(y, m);
@@ -2936,6 +3041,20 @@ function renderMonthly() {
 
   var tbody = document.getElementById('pl-cats');
   var rows = '';
+  var nRules = needRules();
+  var wRules = wantRules();
+
+  // Deduplicate by category name
+  function dedupeRules(rules) {
+    var seen = {};
+    return rules.filter(function(r) {
+      var key = r.category || r.name;
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
   rows += '<tr class="subhdr"><td colspan="5">Needs</td></tr>';
   needCats.forEach(function(cat) {
     var spent = spentInMonth(cat.name, y, m);
@@ -2951,7 +3070,7 @@ function renderMonthly() {
     var catBudget = cat.budget;
     var pct = catBudget > 0 ? Math.round(spent/catBudget*100) : 0;
     var diff = catBudget - spent;
-    rows += '<tr><td>' + cat.name + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
+    rows += '<tr><td>' + catName + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
   });
   rows += '<tr class="total-row"><td>Total</td><td class="r">' + fmtInt(totalBudget) + '</td><td class="r">' + fmtInt(totalSpent) + '</td><td class="r" style="color:' + (net>=0?'var(--teal2)':'var(--red2)') + '">' + (net>=0?'+':'-') + fmtInt(Math.abs(net)) + '</td><td></td></tr>';
   tbody.innerHTML = rows;
@@ -5194,6 +5313,238 @@ function renderRules() {
   }).join('');
 }
 
+// ─── CATEGORIES & GROUPS ─────────────────────────────────────────────────────
+
+function renderCategories() {
+  // Groups table
+  var grpTbl = document.getElementById('groups-tbl');
+  if (grpTbl) {
+    if (!state.groups || state.groups.length === 0) {
+      grpTbl.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No groups yet</td></tr>';
+    } else {
+      grpTbl.innerHTML = state.groups.map(function(g, i) {
+        var catCount = (state.categories || []).filter(function(c) { return c.groupId === g.id; }).length;
+        var typeBadge = g.type === 'need'
+          ? '<span class="badge badge-good" style="cursor:pointer" onclick="event.stopPropagation();toggleGroupType(' + i + ')">NEED</span>'
+          : '<span class="badge badge-warn" style="cursor:pointer" onclick="event.stopPropagation();toggleGroupType(' + i + ')">WANT</span>';
+        return '<tr>' +
+          '<td style="font-weight:600">' + g.name + '</td>' +
+          '<td>' + typeBadge + '</td>' +
+          '<td class="r" style="font-family:var(--mono)">' + catCount + '</td>' +
+          '<td><button class="btn btn-ghost btn-sm" onclick="openEditGroup(' + i + ')">Edit</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+  }
+
+  // Categories table
+  var catTbl = document.getElementById('categories-tbl');
+  if (catTbl) {
+    if (!state.categories || state.categories.length === 0) {
+      catTbl.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:1.5rem">No categories yet</td></tr>';
+    } else {
+      catTbl.innerHTML = state.categories.map(function(c, i) {
+        var grp = c.groupId ? groupById(c.groupId) : null;
+        var grpName = grp ? grp.name : '<span style="color:var(--muted)">—</span>';
+        var kwStr = (c.keywords || []).slice(0, 3).join(', ');
+        if ((c.keywords || []).length > 3) kwStr += ' +' + (c.keywords.length - 3);
+        var txCount = state.transactions.filter(function(t) { return t.category === c.name; }).length;
+        return '<tr>' +
+          '<td style="font-weight:500">' + c.name + '</td>' +
+          '<td>' + grpName + '</td>' +
+          '<td class="muted" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (c.keywords || []).join(', ') + '">' + (kwStr || '<span style="opacity:.4">none</span>') + '</td>' +
+          '<td class="r" style="font-family:var(--mono)">' + txCount + '</td>' +
+          '<td><button class="btn btn-ghost btn-sm" onclick="openEditCategory(' + i + ')">Edit</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+  }
+}
+
+function toggleGroupType(idx) {
+  var g = state.groups[idx];
+  g.type = g.type === 'need' ? 'want' : 'need';
+  saveState();
+  renderCategories();
+}
+
+function populateCatGroupSelect(selectedId) {
+  var sel = document.getElementById('cat-edit-group');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— None —</option>';
+  (state.groups || []).forEach(function(g) {
+    var opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = g.name + ' (' + g.type + ')';
+    if (g.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function openAddCategory() {
+  document.getElementById('modal-category-title').textContent = 'Add Category';
+  document.getElementById('edit-cat-idx').value = -1;
+  document.getElementById('cat-delete-btn').style.display = 'none';
+  document.getElementById('cat-edit-name').value = '';
+  document.getElementById('cat-edit-keywords').value = '';
+  populateCatGroupSelect('');
+  document.getElementById('modal-category').classList.add('open');
+}
+
+function openEditCategory(idx) {
+  var c = state.categories[idx];
+  document.getElementById('modal-category-title').textContent = 'Edit Category';
+  document.getElementById('edit-cat-idx').value = idx;
+  document.getElementById('cat-delete-btn').style.display = 'inline-block';
+  document.getElementById('cat-edit-name').value = c.name;
+  document.getElementById('cat-edit-keywords').value = (c.keywords || []).join('\n');
+  populateCatGroupSelect(c.groupId || '');
+  document.getElementById('modal-category').classList.add('open');
+}
+
+function saveCategory() {
+  var idx = parseInt(document.getElementById('edit-cat-idx').value);
+  var name = document.getElementById('cat-edit-name').value.trim();
+  var groupId = document.getElementById('cat-edit-group').value || null;
+  var keywords = document.getElementById('cat-edit-keywords').value.split('\n').map(function(k) { return k.trim().toUpperCase(); }).filter(function(k) { return k.length > 0; });
+
+  if (!name) { showToast('Enter a category name'); return; }
+
+  var id = 'cat_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+
+  if (idx === -1) {
+    // Check for duplicate
+    if (state.categories.some(function(c) { return c.name.toLowerCase() === name.toLowerCase(); })) {
+      showToast('Category "' + name + '" already exists');
+      return;
+    }
+    state.categories.push({ id: id, name: name, groupId: groupId, keywords: keywords });
+  } else {
+    var oldName = state.categories[idx].name;
+    state.categories[idx] = { id: id, name: name, groupId: groupId, keywords: keywords };
+    // Rename category in transactions if name changed
+    if (oldName !== name) {
+      state.transactions.forEach(function(t) {
+        if (t.category === oldName) t.category = name;
+      });
+    }
+  }
+
+  // Also sync keywords to bowes_cat_overrides
+  var overrides = loadOverrides();
+  keywords.forEach(function(k) { overrides[k] = name; });
+  saveOverrides(overrides);
+
+  saveState();
+  closeModal('modal-category');
+  showToast(idx === -1 ? 'Category added' : 'Category updated');
+  renderCategories();
+}
+
+function deleteCategory() {
+  var idx = parseInt(document.getElementById('edit-cat-idx').value);
+  if (idx < 0) return;
+  var cat = state.categories[idx];
+  if (!confirm('Delete "' + cat.name + '"? Transactions keep their current category.')) return;
+  state.categories.splice(idx, 1);
+  saveState();
+  closeModal('modal-category');
+  showToast('Category deleted');
+  renderCategories();
+}
+
+function openAddGroup() {
+  document.getElementById('modal-group-title').textContent = 'Add Group';
+  document.getElementById('edit-grp-idx').value = -1;
+  document.getElementById('grp-delete-btn').style.display = 'none';
+  document.getElementById('grp-edit-name').value = '';
+  document.getElementById('grp-type-need').checked = true;
+  document.getElementById('modal-group').classList.add('open');
+}
+
+function openEditGroup(idx) {
+  var g = state.groups[idx];
+  document.getElementById('modal-group-title').textContent = 'Edit Group';
+  document.getElementById('edit-grp-idx').value = idx;
+  document.getElementById('grp-delete-btn').style.display = 'inline-block';
+  document.getElementById('grp-edit-name').value = g.name;
+  if (g.type === 'want') document.getElementById('grp-type-want').checked = true;
+  else document.getElementById('grp-type-need').checked = true;
+  document.getElementById('modal-group').classList.add('open');
+}
+
+function saveGroup() {
+  var idx = parseInt(document.getElementById('edit-grp-idx').value);
+  var name = document.getElementById('grp-edit-name').value.trim();
+  var type = document.getElementById('grp-type-want').checked ? 'want' : 'need';
+
+  if (!name) { showToast('Enter a group name'); return; }
+
+  var id = 'grp_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+
+  if (idx === -1) {
+    if (state.groups.some(function(g) { return g.name.toLowerCase() === name.toLowerCase(); })) {
+      showToast('Group "' + name + '" already exists');
+      return;
+    }
+    state.groups.push({ id: id, name: name, type: type });
+  } else {
+    var oldId = state.groups[idx].id;
+    state.groups[idx] = { id: id, name: name, type: type };
+    // Update category references if id changed
+    if (oldId !== id) {
+      state.categories.forEach(function(c) {
+        if (c.groupId === oldId) c.groupId = id;
+      });
+    }
+  }
+
+  saveState();
+  closeModal('modal-group');
+  showToast(idx === -1 ? 'Group added' : 'Group updated');
+  renderCategories();
+}
+
+function deleteGroup() {
+  var idx = parseInt(document.getElementById('edit-grp-idx').value);
+  if (idx < 0) return;
+  var g = state.groups[idx];
+  var catCount = state.categories.filter(function(c) { return c.groupId === g.id; }).length;
+  if (catCount > 0 && !confirm('Group "' + g.name + '" has ' + catCount + ' categories. They will become ungrouped. Continue?')) return;
+  // Unlink categories
+  state.categories.forEach(function(c) { if (c.groupId === g.id) c.groupId = null; });
+  state.groups.splice(idx, 1);
+  saveState();
+  closeModal('modal-group');
+  showToast('Group deleted');
+  renderCategories();
+}
+
+// Add "+ New Category" option to recurring modal's category dropdown
+function populateRecCategorySelectV2(selected) {
+  var sel = document.getElementById('rec-category');
+  if (!sel) return;
+  sel.innerHTML = allCategories().map(function(c){
+    return '<option value="' + c + '"' + (c===selected?' selected':'') + '>' + c + '</option>';
+  }).join('') + '<option value="__new_cat__">+ New Category...</option>';
+  sel.onchange = function() {
+    if (sel.value === '__new_cat__') {
+      var name = prompt('New category name:');
+      if (name && name.trim()) {
+        name = name.trim();
+        if (!state.categories.some(function(c) { return c.name.toLowerCase() === name.toLowerCase(); })) {
+          var id = 'cat_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+          state.categories.push({ id: id, name: name, groupId: null, keywords: [] });
+          saveState();
+        }
+        populateRecCategorySelectV2(name);
+      } else {
+        sel.value = selected || '';
+      }
+    }
+  };
+}
+
 // ─── RECURRING RULES ──────────────────────────────────────────────────────────
 
 var DEFAULT_RECURRING = [];  // Personal rules live in Dropbox — not hardcoded
@@ -5298,15 +5649,12 @@ function renderRecurring() {
   var fixed    = state.recurring.filter(function(r){ return r.billType === 'fixed'; });
   var variable = state.recurring.filter(function(r){ return r.billType === 'variable'; });
 
-  // Monthly totals estimate
-  var monthlyOut = state.recurring.filter(function(r){ return r.billType !== 'income' && r.active; }).reduce(function(s,r){
-    var factor = r.schedule === 'annual' ? 1/12 : r.schedule === 'semiannual' ? 1/6 : r.schedule === 'biweekly' ? 2.17 : r.schedule === 'weekly' ? 4.33 : 1;
-    return s + r.amount * factor;
-  }, 0);
-  var monthlyIn = state.recurring.filter(function(r){ return r.billType === 'income' && r.active; }).reduce(function(s,r){
-    var factor = r.schedule === 'biweekly' ? 2.17 : r.schedule === 'weekly' ? 4.33 : 1;
-    return s + r.amount * factor;
-  }, 0);
+  // Monthly totals from helpers
+  var mInc = monthlyIncome();
+  var mNeeds = monthlyNeeds();
+  var mWants = monthlyWants();
+  var mFree = freeCashMonthly();
+  var monthlyOut = mNeeds + mWants;
 
   var cards = document.getElementById('rec-cards');
   if (cards) cards.innerHTML = [
@@ -5525,172 +5873,10 @@ function syncRecurringToBudget(rule) {
   });
 }
 
-// ─── BUDGET SYNC (lives on Recurring page) ──────────────────────────────────
-
-var _syncMatches = [];
-
-function openBudgetSync() {
-  initRecurring();
-  var rules = (state.recurring || []).filter(function(r) { return r.active && r.billType !== 'income'; });
-  if (rules.length === 0) { showToast('No active expense rules to sync'); return; }
-
-  // Build pool of all budget items with their source
-  var pool = [];
-  state.needs.forEach(function(n, i) { pool.push({ type:'need', idx:i, name:n.name, amt:n.amt, key:'need-'+i }); });
-  state.wants.forEach(function(w, i) { pool.push({ type:'want', idx:i, name:w.name, amt:w.amt, key:'want-'+i }); });
-
-  var claimed = {}; // track which budget items are already matched
-
-  // Smart match each rule to a budget item
-  _syncMatches = rules.map(function(rule, ri) {
-    var monthlyAmt = recurringMonthlyAmt(rule);
-    var freq = recurringToFreq(rule.schedule);
-    var rawAmt = (freq === 'monthly' && rule.schedule === 'bimonthly') ? monthlyAmt : rule.amount;
-    var rName = rule.name.toUpperCase();
-    var rCat = (rule.category || '').toUpperCase();
-
-    // 1. Exact name match
-    var match = pool.find(function(p) { return !claimed[p.key] && p.name.toUpperCase() === rName; });
-    // 2. Category matches budget name
-    if (!match && rCat) match = pool.find(function(p) { return !claimed[p.key] && p.name.toUpperCase() === rCat; });
-    // 3. Partial — rule name contains budget name or vice versa
-    if (!match) match = pool.find(function(p) {
-      if (claimed[p.key]) return false;
-      var pUp = p.name.toUpperCase();
-      return (pUp.length > 3 && rName.includes(pUp)) || (rName.length > 3 && pUp.includes(rName));
-    });
-
-    if (match) claimed[match.key] = true;
-
-    return {
-      ruleIdx: ri,
-      ruleName: rule.name,
-      ruleMonthly: monthlyAmt,
-      ruleRawAmt: rawAmt,
-      ruleFreq: freq,
-      ruleSchedule: scheduleLabel(rule),
-      matchKey: match ? match.key : 'create',
-      matchName: match ? match.name : null,
-      matchAmt: match ? match.amt : 0,
-      autoMatched: !!match,
-      amtMatch: match ? match.amt === monthlyAmt : false
-    };
-  });
-
-  // Build UI
-  var optionsHtml = '<option value="create">+ Create new budget item</option><option value="skip">Skip (don\'t sync)</option>';
-  pool.forEach(function(p) {
-    optionsHtml += '<option value="' + p.key + '">' + (p.type==='need'?'Need':'Want') + ': ' + p.name + ' (' + fmtInt(p.amt) + '/mo)</option>';
-  });
-
-  var html = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between">' +
-    '<span>RECURRING RULE</span><span>BUDGET ITEM</span></div>';
-
-  html += _syncMatches.map(function(m, i) {
-    var statusIcon = m.autoMatched ? (m.amtMatch ? '✓' : '⚠') : '?';
-    var statusColor = m.autoMatched ? (m.amtMatch ? 'var(--teal2)' : 'var(--amber2)') : 'var(--muted)';
-    var statusText = m.autoMatched ? (m.amtMatch ? 'Matched' : 'Amount differs') : 'No match — will create';
-
-    return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-      '<div style="display:flex;gap:12px;align-items:center">' +
-        // Left: recurring rule
-        '<div style="flex:1">' +
-          '<div style="font-size:13px;font-weight:600">' + m.ruleName + '</div>' +
-          '<div style="font-family:var(--mono);font-size:14px;color:var(--teal2);margin-top:2px">' + fmtInt(m.ruleMonthly) + '/mo' +
-            (m.ruleFreq !== 'monthly' ? ' <span style="font-size:10px;color:var(--muted)">(' + fmtInt(m.ruleRawAmt) + ' ' + freqLabel(m.ruleFreq) + ')</span>' : '') +
-          '</div>' +
-          '<div style="font-size:10px;color:var(--muted)">' + m.ruleSchedule + '</div>' +
-        '</div>' +
-        // Middle: status
-        '<div style="text-align:center;width:40px">' +
-          '<div style="font-size:16px;color:' + statusColor + '">' + statusIcon + '</div>' +
-          '<div style="font-size:9px;color:' + statusColor + '">' + statusText + '</div>' +
-        '</div>' +
-        // Right: budget match dropdown
-        '<div style="flex:1">' +
-          '<select class="form-input" id="sync-match-' + i + '" onchange="syncMatchChanged(' + i + ')" style="font-size:12px;padding:6px 8px">' +
-            optionsHtml.replace('value="' + m.matchKey + '"', 'value="' + m.matchKey + '" selected') +
-          '</select>' +
-          (m.autoMatched && !m.amtMatch ? '<div style="font-size:11px;color:var(--amber2);margin-top:3px">Budget: ' + fmtInt(m.matchAmt) + '/mo → will update to ' + fmtInt(m.ruleMonthly) + '/mo</div>' : '') +
-          (m.autoMatched && m.amtMatch ? '<div style="font-size:11px;color:var(--teal2);margin-top:3px">✓ In sync at ' + fmtInt(m.matchAmt) + '/mo</div>' : '') +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-
-  // Show unmatched budget items (exist in budget but no recurring rule)
-  var unmatchedBudget = pool.filter(function(p) { return !claimed[p.key]; });
-  if (unmatchedBudget.length > 0) {
-    html += '<div style="margin-top:1rem;padding-top:.75rem;border-top:2px solid var(--border)">' +
-      '<div style="font-size:12px;color:var(--amber2);font-weight:600;margin-bottom:6px">' + unmatchedBudget.length + ' budget items with no recurring rule:</div>' +
-      unmatchedBudget.map(function(p) {
-        return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px">' +
-          '<span style="color:var(--muted)">' + (p.type==='need'?'Need':'Want') + ': ' + p.name + '</span>' +
-          '<span style="font-family:var(--mono);color:var(--muted)">' + fmtInt(p.amt) + '/mo</span>' +
-        '</div>';
-      }).join('') +
-      '<div style="font-size:10px;color:var(--muted);margin-top:4px">These may be one-off budget items or need a recurring rule added.</div>' +
-    '</div>';
-  }
-
-  document.getElementById('sync-match-list').innerHTML = html;
-  document.getElementById('modal-sync').classList.add('open');
-}
-
-function syncMatchChanged(idx) {
-  var sel = document.getElementById('sync-match-' + idx);
-  _syncMatches[idx].matchKey = sel.value;
-}
-
-function applySyncMatches() {
-  var updated = 0, created = 0, skipped = 0;
-
-  _syncMatches.forEach(function(m) {
-    var key = m.matchKey;
-    if (key === 'skip') { skipped++; return; }
-
-    var freq = m.ruleFreq;
-    var rawAmt = m.ruleRawAmt;
-    var monthlyAmt = m.ruleMonthly;
-
-    if (key === 'create') {
-      // Create new budget item in Needs
-      state.needs.push({
-        name: m.ruleName,
-        amt: monthlyAmt,
-        rawAmt: rawAmt,
-        freq: freq,
-        notes: 'Synced from: ' + m.ruleSchedule,
-        group: 'Other'
-      });
-      created++;
-    } else {
-      // Update existing budget item
-      var parts = key.split('-');
-      var arr = parts[0] === 'need' ? state.needs : state.wants;
-      var idx = parseInt(parts[1]);
-      if (arr[idx]) {
-        arr[idx].amt = monthlyAmt;
-        arr[idx].rawAmt = rawAmt;
-        arr[idx].freq = freq;
-        updated++;
-      }
-    }
-  });
-
-  saveState();
-  closeModal('modal-sync');
-  var msg = [];
-  if (updated) msg.push(updated + ' updated');
-  if (created) msg.push(created + ' created');
-  if (skipped) msg.push(skipped + ' skipped');
-  showToast(msg.join(', ') || 'No changes');
-  _syncMatches = [];
-  renderPage(currentPage);
-}
-
-// Legacy wrapper
-function syncAllRecurringToBudget() { openBudgetSync(); }
+// Budget sync removed — recurring IS the budget now
+function openBudgetSync() { showToast('Recurring rules are the budget — no sync needed'); }
+function applySyncMatches() {}
+function syncAllRecurringToBudget() {}
 
 function deleteRecurring() {
   var idx = parseInt(document.getElementById('edit-rec-idx').value);
@@ -7343,7 +7529,14 @@ function renderReports() {
   }
 
   // ── Budget vs Actual horizontal bars
-  var allCats = state.needs.concat(state.wants);
+  var seenBVA = {};
+  var allCats = (state.recurring || []).filter(function(r) {
+    if (!r.active || r.billType === 'income') return false;
+    var key = r.category || r.name;
+    if (seenBVA[key]) return false;
+    seenBVA[key] = true;
+    return true;
+  }).map(function(r) { return { name: r.category || r.name, amt: recurringMonthlyAmtHelper(r) }; });
   var periodMonths = months.length;
   var barsEl = document.getElementById('rpt-budget-bars');
   if (barsEl) {
@@ -7549,6 +7742,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('networth')"><span class="nav-icon">◑</span> Net Worth</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('goals')"><span class="nav-icon">◉</span> Goals</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('debts')"><span class="nav-icon">◎</span> Debts</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('categories')"><span class="nav-icon">◧</span> Categories</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('needs')"><span class="nav-icon">⬡</span> Needs Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('wants')"><span class="nav-icon">◉</span> Wants Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('categories')"><span class="nav-icon">◧</span> Categories</div>
