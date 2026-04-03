@@ -2067,6 +2067,61 @@ function loadState() {
     state = migrateToV2(state);
     saveState();
   }
+  // Force re-migration if categories/groups are empty but old data exists
+  if ((!state.categories || state.categories.length === 0) && ((state.needs && state.needs.length > 0) || (state.wants && state.wants.length > 0))) {
+    state.schemaVersion = 1; // force re-run
+    state = migrateToV2(state);
+    saveState();
+  }
+  // Always repair category→group links
+  repairCategoryLinks();
+}
+
+function repairCategoryLinks() {
+  if (!state.categories || !state.groups) return;
+  var needsLookup = {};
+  (state.needs || []).forEach(function(n) { needsLookup[n.name] = n.group || 'Other'; });
+  var wantsLookup = {};
+  (state.wants || []).forEach(function(w) { wantsLookup[w.name] = true; });
+  var fixed = 0;
+  state.categories.forEach(function(cat) {
+    if (cat.groupId) {
+      var grp = (state.groups || []).find(function(g) { return g.id === cat.groupId; });
+      if (grp) return; // link is good
+    }
+    // Try to fix from needs
+    if (needsLookup[cat.name]) {
+      var grpName = needsLookup[cat.name];
+      var matchGrp = (state.groups || []).find(function(g) { return g.name === grpName; });
+      if (matchGrp) { cat.groupId = matchGrp.id; fixed++; return; }
+    }
+    // Try from wants
+    if (wantsLookup[cat.name]) {
+      var wGrp = (state.groups || []).find(function(g) { return g.type === 'want'; });
+      if (wGrp) { cat.groupId = wGrp.id; fixed++; return; }
+    }
+  });
+  // Ensure every recurring rule's category exists
+  (state.recurring || []).forEach(function(r) {
+    if (!r.category) return;
+    var exists = state.categories.find(function(c) { return c.name === r.category; });
+    if (!exists) {
+      var gid = null;
+      if (needsLookup[r.category]) {
+        var mg = (state.groups || []).find(function(g) { return g.name === needsLookup[r.category]; });
+        gid = mg ? mg.id : null;
+      } else if (wantsLookup[r.category]) {
+        var wg = (state.groups || []).find(function(g) { return g.type === 'want'; });
+        gid = wg ? wg.id : null;
+      }
+      state.categories.push({ id: 'cat_' + r.category.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: r.category, groupId: gid, keywords: [] });
+      fixed++;
+    }
+  });
+  if (fixed > 0) {
+    console.log('[Budget Tracker] Repaired ' + fixed + ' category→group links');
+    saveState();
+  }
 }
 
 function saveState() {
@@ -2224,9 +2279,14 @@ function needRules() {
   return (state.recurring || []).filter(function(r) {
     if (!r.active || r.billType === 'income') return false;
     var cat = catByName(r.category);
-    if (!cat || !cat.groupId) return false;
-    var grp = groupById(cat.groupId);
-    return grp && grp.type === 'need';
+    if (cat && cat.groupId) {
+      var grp = groupById(cat.groupId);
+      if (grp) return grp.type === 'need';
+    }
+    // Fallback: check old state.needs array
+    var isNeed = (state.needs || []).some(function(n) { return n.name === r.category || n.name === r.name; });
+    if (isNeed) return true;
+    return false;
   });
 }
 
@@ -2234,9 +2294,14 @@ function wantRules() {
   return (state.recurring || []).filter(function(r) {
     if (!r.active || r.billType === 'income') return false;
     var cat = catByName(r.category);
-    if (!cat || !cat.groupId) return false;
-    var grp = groupById(cat.groupId);
-    return grp && grp.type === 'want';
+    if (cat && cat.groupId) {
+      var grp = groupById(cat.groupId);
+      if (grp) return grp.type === 'want';
+    }
+    // Fallback: check old state.wants array
+    var isWant = (state.wants || []).some(function(w) { return w.name === r.category || w.name === r.name; });
+    if (isWant) return true;
+    return false;
   });
 }
 
