@@ -720,7 +720,7 @@ tbody td.muted { color:var(--muted)!important; }
     <!-- NEEDS -->
     <div class="page" id="page-needs">
       <div class="page-title">Needs Budget</div>
-      <div class="page-sub">Fixed obligations — edit monthly budget amounts</div>
+      <div class="page-sub">Fixed obligations — sourced from your recurring rules</div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Category</th><th class="r">Budget/mo</th><th>Notes</th><th></th></tr></thead>
@@ -733,7 +733,7 @@ tbody td.muted { color:var(--muted)!important; }
     <!-- WANTS -->
     <div class="page" id="page-wants">
       <div class="page-title">Wants Budget</div>
-      <div class="page-sub">Discretionary spend — your levers</div>
+      <div class="page-sub">Discretionary spend — sourced from your recurring rules</div>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Category</th><th class="r">Budget/mo</th><th>Notes</th><th></th></tr></thead>
@@ -743,12 +743,45 @@ tbody td.muted { color:var(--muted)!important; }
       <button class="btn btn-ghost btn-sm" onclick="openAddRecurring('variable')">+ Add Recurring Rule</button>
     </div>
 
+    <!-- CATEGORIES & GROUPS -->
+    <div class="page" id="page-categories">
+      <div class="page-title">Categories & Groups</div>
+      <div class="page-sub">Master list — every spend category and how they're organized</div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Groups</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddGroup()">+ Add Group</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Type</th><th>Categories</th><th></th></tr></thead>
+          <tbody id="groups-tbl"></tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div class="section-hdr">
+          <div class="section-title">Categories</div>
+          <button class="btn btn-primary btn-sm" onclick="openAddCategory()">+ Add Category</button>
+        </div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Name</th><th>Group</th><th>Keywords</th><th>Transactions</th><th></th></tr></thead>
+          <tbody id="categories-tbl"></tbody>
+        </table></div>
+      </div>
+    </div>
+
     <!-- SUBSCRIPTIONS -->
     <!-- BUDGET PLAN -->
     <div class="page" id="page-budget">
       <div class="page-title">Budget Plan</div>
-      <div class="page-sub">Your complete budget at every time horizon</div>
-      <div class="cards-grid" id="plan-cards"></div>
+      <div class="page-sub">The big picture — your complete budget at every time horizon</div>
+      <div class="cards-grid">
+        <div class="stat-card good"><div class="stat-label">Income</div><div class="stat-val" id="plan-income-val">$0</div><div class="stat-note" id="plan-income-note">Monthly income</div></div>
+        <div class="stat-card neutral"><div class="stat-label">Needs</div><div class="stat-val" id="plan-needs-val">$0</div><div class="stat-note" id="plan-needs-pct"></div></div>
+        <div class="stat-card warn"><div class="stat-label">Wants</div><div class="stat-val" id="plan-wants-val">$0</div><div class="stat-note" id="plan-wants-pct"></div></div>
+        <div class="stat-card good"><div class="stat-label">Free Cash</div><div class="stat-val" id="plan-left-val">$0</div><div class="stat-note">Available for debt/savings</div></div>
+      </div>
       <div id="budget-plan-content"></div>
     </div>
 
@@ -1107,7 +1140,7 @@ tbody td.muted { color:var(--muted)!important; }
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div class="page-title" style="margin-bottom:0">Recurring Rules</div>
       </div>
-      <div class="page-sub">Your bills and income — this IS your budget. Changes here update Needs, Wants, and all budget views.</div>
+      <div class="page-sub">Your bills and income — recurring IS the budget. Changes here update everything.</div>
 
       <div class="cards-grid" id="rec-cards"></div>
 
@@ -1436,8 +1469,8 @@ tbody td.muted { color:var(--muted)!important; }
       <div class="form-group">
         <label class="form-label">Include in Net Worth?</label>
         <select class="form-input" id="debt-nw-liability">
-          <option value="yes">Yes — appears as liability</option>
-          <option value="no">No — exclude from net worth</option>
+          <option value="yes">Yes — auto-appears as liability</option>
+          <option value="no">No — exclude from Net Worth</option>
         </select>
       </div>
     </div>
@@ -1830,6 +1863,59 @@ tbody td.muted { color:var(--muted)!important; }
   </div>
 </div>
 
+<!-- EDIT CATEGORY MODAL -->
+<div class="modal-overlay" id="modal-category">
+  <div class="modal" style="width:480px">
+    <div class="modal-title" id="modal-category-title">Edit Category</div>
+    <input type="hidden" id="edit-cat-idx">
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="cat-name">
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Group</label>
+      <select class="form-input" id="cat-group"></select>
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Keywords (one per line — used for auto-import)</label>
+      <textarea class="form-input" id="cat-keywords" rows="4" style="resize:vertical" placeholder="CHIPOTLE&#10;BURGER KING&#10;MCDONALD"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="cat-delete-btn" onclick="deleteCategory()" style="display:none">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-category')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCategory()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT GROUP MODAL -->
+<div class="modal-overlay" id="modal-group">
+  <div class="modal" style="width:400px">
+    <div class="modal-title" id="modal-group-title">Edit Group</div>
+    <input type="hidden" id="edit-grp-idx">
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="grp-name">
+    </div>
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label class="form-label">Type</label>
+      <div style="display:flex;gap:12px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="grp-type" value="need" id="grp-type-need"> Need
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="grp-type" value="want" id="grp-type-want"> Want
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="grp-delete-btn" onclick="deleteGroup()" style="display:none">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-group')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGroup()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1837,8 +1923,6 @@ tbody td.muted { color:var(--muted)!important; }
 
 var DEFAULT_STATE = {
   income: 0,
-  ccBalance: 0,
-  ccOriginal: 0,
   transactions: [],
   dayItems: [],
   needs: [],
@@ -1850,55 +1934,14 @@ var DEFAULT_STATE = {
   schemaVersion: 2
 };
 
-// ─── MIGRATION ───────────────────────────────────────────────────────────────
+// ─── V2 MIGRATION ────────────────────────────────────────────────────────────
 
-function migrateToV2(st) {
-  if (st.schemaVersion >= 2) return st;
+function migrateToV2(s) {
+  if (s.schemaVersion >= 2) return;
 
-  // --- 1. Build groups from needs[].group values ---
-  var groupMap = {};  // name -> {id, name, type}
-  var needGroups = {};
-  (st.needs || []).forEach(function(n) {
-    var g = n.group || 'Other';
-    if (!needGroups[g]) needGroups[g] = true;
-  });
-  Object.keys(needGroups).forEach(function(g) {
-    var id = 'grp_' + g.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g,'_');
-    groupMap[g] = { id: id, name: g, type: 'need' };
-  });
-  // Default want group
-  if (!groupMap['Wants']) {
-    groupMap['Wants'] = { id: 'grp_wants', name: 'Wants', type: 'want' };
-  }
-  st.groups = Object.keys(groupMap).map(function(k) { return groupMap[k]; });
-
-  // --- 2. Build categories from needs, wants, transactions, and autoCategory keywords ---
-  var catNames = {};  // name -> true
-  (st.needs || []).forEach(function(n) { if (n.name) catNames[n.name] = true; });
-  (st.wants || []).forEach(function(w) { if (w.name) catNames[w.name] = true; });
-  (st.transactions || []).forEach(function(t) { if (t.category && t.category !== 'Uncategorized' && t.category !== 'Other') catNames[t.category] = true; });
-
-  // Add known autoCategory targets that might not appear in needs/wants
-  var autoCatNames = ['Income','Fuel','Dining Out','Groceries & Household','Mortgage','Car Payment','Loans',
-    'Internet / Cable','Electric','Phone','Auto Insurance','Greenlight Allowance','School Lunch',
-    'Daycare & Son','Daughters — Activities','Daughters — Band Equip.','Home & Heating','Auto Maintenance',
-    'Subscriptions','Skiing & Outdoors','Income Taxes','Healthcare','Clothing','Entertainment',
-    'Fitness / Races','Cash','CC Payment','CC Interest & Fees','Transfer','Transfer — Savings'];
-  autoCatNames.forEach(function(n) { catNames[n] = true; });
-
-  // Ensure special categories
-  catNames['Income'] = true;
-  catNames['Uncategorized'] = true;
-
-  // Resolve groupId for each category
-  var needsLookup = {};
-  (st.needs || []).forEach(function(n) { needsLookup[n.name] = n.group || 'Other'; });
-  var wantsLookup = {};
-  (st.wants || []).forEach(function(w) { wantsLookup[w.name] = true; });
-
-  // Build autoCategory keyword map
-  var autoCatKeywords = {
-    'Income': ['MOM BRANDS','PAYROLL'],
+  // ── Hardcoded keyword map from original autoCategory() ──
+  var AUTO_KEYWORDS = {
+    'Income': ['MOM BRANDS'],
     'Fuel': ['KWIK FILL','SHEETZ','SUNOCO','CITGO','COUNTRY FAIR','GIANT EAG','GETGO','GET GO','SPEEDWAY','EXXON','AMOCO','JIFFY MINI','PILOT_','STEAMBURG GAS'],
     'Dining Out': ['CHIPOTLE','MCDONALD','BURGER KING','ARBY','LITTLE CAESARS','KFC','DOORDASH','DAIRY QUEEN','PANERA','CHICK-FIL','APPLEBEE','SUBWAY','TACO BELL','STARBUCKS','7 BREW','DUNKIN','FACTOR75','PIZZA','TEXAS ROADHOUSE','PAPA JOHN','CRACKER BARREL','OLIVE GARDEN','TST*','SAEGERTOWN DAIRY','CUP N SPOON','TIM HORTON','SONIC DRIVE','WINE AND SPIRI','BREWING','TAVERN','HITCHYS','ONSLOW ABC','322 BREWS','SHERRY DISTRIB'],
     'Groceries & Household': ['WALMART','WAL-MART','DOLLAR GENERAL','ALDI','GIANT EAGLE','SAMS CLUB','DOLLARTREE','FIVE BELOW','H & H MARKET','FAMILY DOLLAR','RED APPLE','PUBLIX','TRACTOR SUPPLY','SAEGERTOWN DA','MALADYS','SHAWNEE SPRINGS'],
@@ -1924,119 +1967,160 @@ function migrateToV2(st) {
     'Entertainment': ['MOVIES AT MEADVILL','PORT FARMS','ROUND1','ELEVATE ERIE','BOOKS A MILLION','TARGET','DICKS SPORTING','HOBBYLOBBY','ASCEND ERIE'],
     'Fitness / Races': ['BIKEREG','NORTH PARK HALF','365 PAY','365 MARKET','SP BURCHDA BIKES'],
     'Cash': ['ATM WITHDRAWAL','ATM TRANSACTION','CARD FREE ATM'],
+    'Other': ['AMAZON','AFTERPAY','BAMBU','EBAY','ETSY','BACKCOUNTRY','REI.COM','PAYPAL']
   };
 
-  // Merge overrides from bowes_cat_overrides localStorage
-  var overrides = {};
-  try { overrides = JSON.parse(localStorage.getItem('bowes_cat_overrides') || '{}'); } catch(e) {}
+  // ── Infer group assignments for known categories ──
+  var CAT_GROUP_MAP = {
+    'Mortgage': 'grp_housing', 'Mortgage / Rent': 'grp_housing', 'Car Payment': 'grp_housing', 'Home Insurance': 'grp_housing', 'Property Taxes': 'grp_housing', 'Loans': 'grp_housing',
+    'Electric': 'grp_utilities', 'Internet': 'grp_utilities', 'Internet / Cable': 'grp_utilities', 'Phone': 'grp_utilities',
+    'Fuel': 'grp_transport', 'Auto Maintenance': 'grp_transport', 'Auto Insurance': 'grp_transport',
+    'Groceries': 'grp_food', 'Groceries & Household': 'grp_food', 'Home & Heating': 'grp_food',
+    'Healthcare': 'grp_other_needs', 'Income Taxes': 'grp_taxes',
+    'Greenlight Allowance': 'grp_kids', 'School Lunch': 'grp_kids', 'Daycare & Son': 'grp_kids', 'Daughters — Activities': 'grp_kids', 'Daughters — Band Equip.': 'grp_kids',
+    'Dining Out': 'grp_recreation', 'Subscriptions': 'grp_recreation', 'Entertainment': 'grp_recreation', 'Skiing & Outdoors': 'grp_recreation',
+    'Clothing': 'grp_personal', 'Fitness': 'grp_personal', 'Fitness / Races': 'grp_personal', 'Travel': 'grp_personal', 'Cash': 'grp_personal',
+    'Other': 'grp_personal'
+  };
 
-  // Build categories array
-  st.categories = Object.keys(catNames).sort().map(function(name) {
-    var id = 'cat_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g,'_');
-    // Determine groupId
-    var groupId = null;
-    if (needsLookup[name]) {
-      var grpName = needsLookup[name];
-      groupId = groupMap[grpName] ? groupMap[grpName].id : null;
-    } else if (wantsLookup[name]) {
-      groupId = groupMap['Wants'] ? groupMap['Wants'].id : null;
-    } else if (name === 'Income' || name === 'Uncategorized' || name === 'Transfer' || name === 'Transfer — Savings' || name === 'CC Payment' || name === 'CC Interest & Fees') {
-      groupId = null; // special categories
+  // 1. Build groups from existing needs[].group + standard want groups
+  var groupMap = {};
+  (s.needs || []).forEach(function(n) {
+    var g = n.group || 'Other';
+    var gid = 'grp_' + g.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (!groupMap[gid]) groupMap[gid] = { id: gid, name: g, type: 'need' };
+  });
+  // Ensure standard groups exist
+  var stdGroups = [
+    { id:'grp_housing', name:'Housing', type:'need' },
+    { id:'grp_utilities', name:'Utilities', type:'need' },
+    { id:'grp_transport', name:'Transport', type:'need' },
+    { id:'grp_food', name:'Food & Home', type:'need' },
+    { id:'grp_kids', name:'Kids', type:'need' },
+    { id:'grp_taxes', name:'Taxes', type:'need' },
+    { id:'grp_other_needs', name:'Other', type:'need' },
+    { id:'grp_recreation', name:'Recreation', type:'want' },
+    { id:'grp_personal', name:'Personal', type:'want' }
+  ];
+  stdGroups.forEach(function(sg) { if (!groupMap[sg.id]) groupMap[sg.id] = sg; });
+  s.groups = Object.keys(groupMap).map(function(k) { return groupMap[k]; });
+
+  // 2. Build categories from needs, wants, transactions, and autoCategory keywords
+  var catMap = {}; // name → category object
+  function ensureCat(name, groupId) {
+    if (!name || catMap[name]) return;
+    var id = 'cat_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    catMap[name] = { id: id, name: name, groupId: groupId || null, keywords: [] };
+  }
+
+  // From needs
+  (s.needs || []).forEach(function(n) {
+    var g = n.group || 'Other';
+    var gid = 'grp_' + g.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    ensureCat(n.name, gid);
+  });
+  // From wants
+  (s.wants || []).forEach(function(w) {
+    var gid = CAT_GROUP_MAP[w.name] || 'grp_personal';
+    ensureCat(w.name, gid);
+  });
+  // From transactions
+  (s.transactions || []).forEach(function(t) {
+    if (t.category && t.category !== 'Uncategorized') {
+      var gid = CAT_GROUP_MAP[t.category] || null;
+      ensureCat(t.category, gid);
     }
-    // Build keywords array from autoCategory + overrides
-    var keywords = [];
-    if (autoCatKeywords[name]) {
-      keywords = autoCatKeywords[name].slice();
+  });
+  // From autoCategory keywords
+  Object.keys(AUTO_KEYWORDS).forEach(function(catName) {
+    var gid = CAT_GROUP_MAP[catName] || null;
+    ensureCat(catName, gid);
+    if (catMap[catName]) {
+      catMap[catName].keywords = AUTO_KEYWORDS[catName].slice();
     }
-    // Add override keywords that point to this category
-    Object.keys(overrides).forEach(function(k) {
-      if (overrides[k] === name && keywords.indexOf(k) === -1) {
-        keywords.push(k);
-      }
-    });
-    return { id: id, name: name, groupId: groupId, keywords: keywords };
   });
 
-  // --- 3. For each needs/wants budget item, ensure a matching recurring rule ---
-  var recurring = st.recurring || [];
+  // Merge keyword overrides from bowes_cat_overrides
+  try {
+    var overrides = JSON.parse(localStorage.getItem('bowes_cat_overrides') || '{}');
+    Object.keys(overrides).forEach(function(key) {
+      var catName = overrides[key];
+      ensureCat(catName, CAT_GROUP_MAP[catName] || null);
+      if (catMap[catName] && catMap[catName].keywords.indexOf(key) === -1) {
+        catMap[catName].keywords.push(key);
+      }
+    });
+  } catch(e) {}
 
+  // Always have special categories
+  ensureCat('Income', null);
+  ensureCat('Transfer', null);
+  ensureCat('Uncategorized', null);
+  ensureCat('CC Payment', null);
+  ensureCat('CC Interest & Fees', null);
+
+  s.categories = Object.keys(catMap).map(function(k) { return catMap[k]; });
+
+  // 3. Convert needs/wants budget items to recurring rules
+  if (!s.recurring) s.recurring = [];
   function findMatchingRule(name) {
-    return recurring.find(function(r) {
+    return s.recurring.find(function(r) {
       return r.active !== false && r.billType !== 'income' && (r.name === name || r.category === name);
     });
   }
 
-  function catIdByName(name) {
-    var cat = st.categories.find(function(c) { return c.name === name; });
-    return cat ? cat.id : null;
+  (s.needs || []).forEach(function(n) {
+    var rule = findMatchingRule(n.name);
+    if (rule) {
+      // Link existing rule to category
+      var cat = catMap[n.name];
+      if (cat) rule.category = n.name;
+    } else if (n.amt > 0) {
+      // Create a recurring rule from budget item
+      var freq = n.freq || 'monthly';
+      var schedMap = { monthly:'monthly', weekly:'weekly', biweekly:'biweekly', semiannual:'semiannual', annual:'annual' };
+      var schedule = schedMap[freq] || 'monthly';
+      var ruleAmt = n.rawAmt || n.amt;
+      s.recurring.push({
+        name: n.name, billType: 'fixed', amount: ruleAmt, variance: 0,
+        category: n.name, schedule: schedule, day: 1, start: '', end: '',
+        notes: 'Migrated from budget', active: true
+      });
+    }
+  });
+  (s.wants || []).forEach(function(w) {
+    var rule = findMatchingRule(w.name);
+    if (rule) {
+      var cat = catMap[w.name];
+      if (cat) rule.category = w.name;
+    } else if (w.amt > 0) {
+      var freq = w.freq || 'monthly';
+      var schedMap = { monthly:'monthly', weekly:'weekly', biweekly:'biweekly', semiannual:'semiannual', annual:'annual' };
+      var schedule = schedMap[freq] || 'monthly';
+      var ruleAmt = w.rawAmt || w.amt;
+      s.recurring.push({
+        name: w.name, billType: 'variable', amount: ruleAmt, variance: 0,
+        category: w.name, schedule: schedule, day: 1, start: '', end: '',
+        notes: 'Migrated from budget', active: true
+      });
+    }
+  });
+
+  // 4. Mark all debts with nwLiability
+  (s.debts || []).forEach(function(d) { d.nwLiability = true; });
+
+  // 5. Migrate ccBalance/ccOriginal to debts
+  if (s.ccBalance > 0 || s.ccOriginal > 0) {
+    var ccDebt = (s.debts || []).find(function(d) { return d.type === 'credit_card'; });
+    if (ccDebt) {
+      if (s.ccBalance > 0 && !ccDebt.balance) ccDebt.balance = s.ccBalance;
+      if (s.ccOriginal > 0 && !ccDebt.original) ccDebt.original = s.ccOriginal;
+    }
   }
 
-  (st.needs || []).forEach(function(item) {
-    var rule = findMatchingRule(item.name);
-    if (rule) {
-      // Link category if not already set
-      if (!rule.category) rule.category = item.name;
-    } else if (item.amt > 0) {
-      // Create a monthly recurring rule from the budget item
-      var rawAmt = item.rawAmt || item.amt;
-      var schedule = 'monthly';
-      if (item.freq === 'weekly') schedule = 'weekly';
-      else if (item.freq === 'biweekly') schedule = 'biweekly';
-      else if (item.freq === 'semiannual') schedule = 'semiannual';
-      else if (item.freq === 'annual') schedule = 'annual';
-      else if (item.freq === 'quarterly') schedule = 'semiannual'; // closest match
-      recurring.push({
-        name: item.name,
-        billType: 'fixed',
-        amount: rawAmt,
-        variance: 0,
-        category: item.name,
-        schedule: schedule,
-        day: 1,
-        start: '',
-        end: '',
-        notes: 'Auto-created from budget: ' + item.name,
-        active: true
-      });
-    }
-  });
-  (st.wants || []).forEach(function(item) {
-    var rule = findMatchingRule(item.name);
-    if (rule) {
-      if (!rule.category) rule.category = item.name;
-    } else if (item.amt > 0) {
-      var rawAmt = item.rawAmt || item.amt;
-      var schedule = 'monthly';
-      if (item.freq === 'weekly') schedule = 'weekly';
-      else if (item.freq === 'biweekly') schedule = 'biweekly';
-      else if (item.freq === 'semiannual') schedule = 'semiannual';
-      else if (item.freq === 'annual') schedule = 'annual';
-      recurring.push({
-        name: item.name,
-        billType: 'variable',
-        amount: rawAmt,
-        variance: 0,
-        category: item.name,
-        schedule: schedule,
-        day: 1,
-        start: '',
-        end: '',
-        notes: 'Auto-created from budget: ' + item.name,
-        active: true
-      });
-    }
-  });
-  st.recurring = recurring;
-
-  // --- 4. Mark debts with nwLiability ---
-  (st.debts || []).forEach(function(d) {
-    if (d.nwLiability === undefined) d.nwLiability = true;
-  });
-
-  // --- 5. Set schema version (don't delete needs/wants yet — kept for Phase 3 fallback) ---
-  st.schemaVersion = 2;
-
-  return st;
+  // 6. Set schema version
+  s.schemaVersion = 2;
+  console.log('[Budget Tracker] Migrated to v2 — ' + s.categories.length + ' categories, ' + s.groups.length + ' groups');
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -2058,70 +2142,12 @@ function loadState() {
   if (!state.assets)       state.assets = [];
   if (!state.nwHistory)    state.nwHistory = [];
   if (!state.dayItems)     state.dayItems = [];
-  if (!state.categories)   state.categories = [];
-  if (!state.groups)       state.groups = [];
   if (!state.needs)        state.needs = [];
   if (!state.wants)        state.wants = [];
-  // Run migration if needed
-  if (!state.schemaVersion || state.schemaVersion < 2) {
-    state = migrateToV2(state);
-    saveState();
-  }
-  // Force re-migration if categories/groups are empty but old data exists
-  if ((!state.categories || state.categories.length === 0) && ((state.needs && state.needs.length > 0) || (state.wants && state.wants.length > 0))) {
-    state.schemaVersion = 1; // force re-run
-    state = migrateToV2(state);
-    saveState();
-  }
-  // Always repair category→group links
-  repairCategoryLinks();
-}
-
-function repairCategoryLinks() {
-  if (!state.categories || !state.groups) return;
-  var needsLookup = {};
-  (state.needs || []).forEach(function(n) { needsLookup[n.name] = n.group || 'Other'; });
-  var wantsLookup = {};
-  (state.wants || []).forEach(function(w) { wantsLookup[w.name] = true; });
-  var fixed = 0;
-  state.categories.forEach(function(cat) {
-    if (cat.groupId) {
-      var grp = (state.groups || []).find(function(g) { return g.id === cat.groupId; });
-      if (grp) return; // link is good
-    }
-    // Try to fix from needs
-    if (needsLookup[cat.name]) {
-      var grpName = needsLookup[cat.name];
-      var matchGrp = (state.groups || []).find(function(g) { return g.name === grpName; });
-      if (matchGrp) { cat.groupId = matchGrp.id; fixed++; return; }
-    }
-    // Try from wants
-    if (wantsLookup[cat.name]) {
-      var wGrp = (state.groups || []).find(function(g) { return g.type === 'want'; });
-      if (wGrp) { cat.groupId = wGrp.id; fixed++; return; }
-    }
-  });
-  // Ensure every recurring rule's category exists
-  (state.recurring || []).forEach(function(r) {
-    if (!r.category) return;
-    var exists = state.categories.find(function(c) { return c.name === r.category; });
-    if (!exists) {
-      var gid = null;
-      if (needsLookup[r.category]) {
-        var mg = (state.groups || []).find(function(g) { return g.name === needsLookup[r.category]; });
-        gid = mg ? mg.id : null;
-      } else if (wantsLookup[r.category]) {
-        var wg = (state.groups || []).find(function(g) { return g.type === 'want'; });
-        gid = wg ? wg.id : null;
-      }
-      state.categories.push({ id: 'cat_' + r.category.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: r.category, groupId: gid, keywords: [] });
-      fixed++;
-    }
-  });
-  if (fixed > 0) {
-    console.log('[Budget Tracker] Repaired ' + fixed + ' category→group links');
-    saveState();
-  }
+  if (!state.categories)   state.categories = [];
+  if (!state.groups)       state.groups = [];
+  // Run v2 migration
+  migrateToV2(state);
 }
 
 function saveState() {
@@ -2239,69 +2265,58 @@ function allCategories() {
   }
   // Fallback to old method
   var cats = [];
-  (state.needs||[]).forEach(function(n) { if (n.name && !cats.includes(n.name)) cats.push(n.name); });
-  (state.wants||[]).forEach(function(w) { if (w.name && !cats.includes(w.name)) cats.push(w.name); });
+  // Primary source: state.categories (v2)
+  if (state.categories && state.categories.length > 0) {
+    state.categories.forEach(function(c) { if (c.name && !cats.includes(c.name)) cats.push(c.name); });
+  } else {
+    // Fallback: old needs/wants arrays
+    (state.needs||[]).forEach(function(n) { if (n.name && !cats.includes(n.name)) cats.push(n.name); });
+    (state.wants||[]).forEach(function(w) { if (w.name && !cats.includes(w.name)) cats.push(w.name); });
+  }
   if (!cats.includes('Income')) cats.push('Income');
   if (!cats.includes('Uncategorized')) cats.push('Uncategorized');
   return cats.sort(function(a, b) { return a.localeCompare(b); });
 }
 
-// Lookup helpers for v2 data model
-function catById(catId) {
-  return (state.categories || []).find(function(c) { return c.id === catId; });
+// ── V2 category/group lookup helpers ────────────────────────────────────────
+function catById(id) {
+  return (state.categories || []).find(function(c) { return c.id === id; });
 }
 function catByName(name) {
   return (state.categories || []).find(function(c) { return c.name === name; });
 }
-function groupById(groupId) {
-  return (state.groups || []).find(function(g) { return g.id === groupId; });
+function groupById(id) {
+  return (state.groups || []).find(function(g) { return g.id === id; });
 }
-function groupByName(name) {
-  return (state.groups || []).find(function(g) { return g.name === name; });
+function groupForCategory(catName) {
+  var cat = catByName(catName);
+  if (!cat || !cat.groupId) return null;
+  return groupById(cat.groupId);
 }
 
-// ─── RECURRING-AS-BUDGET HELPERS ──────────────────────────────────────────────
-
-function recurringMonthlyAmtHelper(rule) {
-  var factor = { monthly:1, biweekly:2.17, weekly:4.33, bimonthly:2, semiannual:1/6, annual:1/12 }[rule.schedule] || 1;
-  return Math.round(rule.amount * factor);
-}
+// ── V2 BUDGET HELPERS — derive budget from recurring rules ──────────────────
 
 function rulesForGroup(groupId) {
   return (state.recurring || []).filter(function(r) {
     if (!r.active || r.billType === 'income') return false;
-    var cat = catByName(r.category);
-    return cat && cat.groupId === groupId;
+    var grp = groupForCategory(r.category);
+    return grp && grp.id === groupId;
   });
 }
 
 function needRules() {
   return (state.recurring || []).filter(function(r) {
     if (!r.active || r.billType === 'income') return false;
-    var cat = catByName(r.category);
-    if (cat && cat.groupId) {
-      var grp = groupById(cat.groupId);
-      if (grp) return grp.type === 'need';
-    }
-    // Fallback: check old state.needs array
-    var isNeed = (state.needs || []).some(function(n) { return n.name === r.category || n.name === r.name; });
-    if (isNeed) return true;
-    return false;
+    var grp = groupForCategory(r.category);
+    return grp && grp.type === 'need';
   });
 }
 
 function wantRules() {
   return (state.recurring || []).filter(function(r) {
     if (!r.active || r.billType === 'income') return false;
-    var cat = catByName(r.category);
-    if (cat && cat.groupId) {
-      var grp = groupById(cat.groupId);
-      if (grp) return grp.type === 'want';
-    }
-    // Fallback: check old state.wants array
-    var isWant = (state.wants || []).some(function(w) { return w.name === r.category || w.name === r.name; });
-    if (isWant) return true;
-    return false;
+    var grp = groupForCategory(r.category);
+    return grp && grp.type === 'want';
   });
 }
 
@@ -2311,63 +2326,80 @@ function incomeRules() {
   });
 }
 
-function monthlyIncome() {
-  return incomeRules().reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
+function v2MonthlyIncome() {
+  return incomeRules().reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
 }
 
-function monthlyNeeds() {
-  return needRules().reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
+function v2MonthlyNeeds() {
+  return needRules().reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
 }
 
-function monthlyWants() {
-  return wantRules().reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
+function v2MonthlyWants() {
+  return wantRules().reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
 }
 
-function freeCashMonthly() {
-  return monthlyIncome() - monthlyNeeds() - monthlyWants();
+function v2FreeCash() {
+  return v2MonthlyIncome() - v2MonthlyNeeds() - v2MonthlyWants();
 }
 
-function budgetForCategoryInMonth(categoryName, y, m) {
-  // Find recurring rules for this category
+// Budget for a specific category in a specific month (period-aware)
+function budgetForCategoryInMonth(catName, y, m) {
   var rules = (state.recurring || []).filter(function(r) {
-    return r.active && r.billType !== 'income' && (r.category === categoryName || r.name === categoryName);
+    return r.active && r.billType !== 'income' && (r.category === catName || r.name === catName);
   });
   if (rules.length === 0) return 0;
-
   var total = 0;
-  var daysInMonth = new Date(y, m + 1, 0).getDate();
-
   rules.forEach(function(rule) {
-    // Check if rule fires in this month
+    // Check if this rule fires in this month
     var fires = false;
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
     for (var d = 1; d <= daysInMonth; d++) {
       var dateStr = y + '-' + String(m + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
       if (recurringFirsOnDate(rule, dateStr)) { fires = true; break; }
     }
     if (fires) {
-      // For monthly/bimonthly/weekly/biweekly — use monthly equivalent
-      if (rule.schedule === 'monthly' || rule.schedule === 'bimonthly' || rule.schedule === 'weekly' || rule.schedule === 'biweekly') {
-        total += recurringMonthlyAmtHelper(rule);
-      } else {
-        // For semiannual/annual — full amount in payment month
-        total += rule.amount;
-      }
+      // For non-monthly schedules that fire this month, use the actual rule amount
+      total += rule.amount;
+    } else if (rule.schedule === 'monthly' || rule.schedule === 'bimonthly' || rule.schedule === 'biweekly' || rule.schedule === 'weekly') {
+      // Monthly/frequent schedules always contribute
+      total += recurringMonthlyAmt(rule);
     }
+    // Semiannual/annual that don't fire this month = $0
   });
   return total;
 }
 
 function totalBudgetForMonth(y, m) {
-  var seen = {};
   var total = 0;
+  var seen = {};
   (state.recurring || []).forEach(function(r) {
     if (!r.active || r.billType === 'income') return;
     var key = r.category || r.name;
-    if (seen[key]) return;
-    seen[key] = true;
-    total += budgetForCategoryInMonth(key, y, m);
+    if (!seen[key]) {
+      seen[key] = true;
+      total += budgetForCategoryInMonth(key, y, m);
+    }
   });
   return total;
+}
+
+// Get all unique budget categories (categories that have active recurring rules)
+function budgetCategories() {
+  var cats = [];
+  var seen = {};
+  (state.recurring || []).forEach(function(r) {
+    if (!r.active || r.billType === 'income') return;
+    var name = r.category || r.name;
+    if (!seen[name]) { seen[name] = true; cats.push(name); }
+  });
+  return cats;
+}
+
+// Helper: recurring monthly amount (defined early for migration, duplicated here for clarity)
+function recurringMonthlyAmt(rule) {
+  if (!rule) return 0;
+  var factor = { monthly:1, biweekly:2.17, weekly:4.33, bimonthly:2, semiannual:1/6, annual:1/12 }[rule.schedule] || 1;
+  return Math.round(rule.amount * factor);
 }
 
 function spentInMonth(catName, y, m) {
@@ -2553,7 +2585,7 @@ function toggleGroup(groupId) {
   collapsed[groupId] = !collapsed[groupId];
   setCollapsed(collapsed);
 
-  // Needs page — re-render table rows (no animation needed)
+  // Needs page — re-render table rows
   if (groupId.startsWith('needs-')) {
     renderNeeds();
     return;
@@ -2562,13 +2594,12 @@ function toggleGroup(groupId) {
   // Dashboard — animate existing DOM elements
   var body = document.getElementById('gbody-' + groupId);
   var chevEl = document.querySelector('[onclick*="\'' + groupId + '\'"] .group-chevron');
-  var hdrRight = document.querySelector('[onclick*="\'' + groupId + '\'"] .group-hdr-right');
 
   if (body) {
     var isNowCollapsed = collapsed[groupId];
     if (isNowCollapsed) {
       body.style.maxHeight = body.scrollHeight + 'px';
-      body.offsetHeight; // force reflow
+      body.offsetHeight;
       body.classList.add('collapsed');
       body.style.maxHeight = '0';
     } else {
@@ -2589,131 +2620,84 @@ function toggleGroup(groupId) {
 function renderGroupedProgress(y, m) {
   var collapsed = getCollapsed();
 
-  // Build groups from recurring rules organized by their category's group
-  var groups = [];
-  var allGrps = state.groups || [];
-
-  allGrps.forEach(function(g) {
-    var rules = rulesForGroup(g.id);
-    if (rules.length === 0) return;
-    // Convert rules to items compatible with the bar rendering
-    var items = rules.map(function(r) {
-      return { name: r.category || r.name, amt: recurringMonthlyAmtHelper(r), freq: r.schedule === 'monthly' ? 'monthly' : r.schedule, rawAmt: r.amount };
-    });
-    // Deduplicate by name (multiple rules for same category)
-    var seen = {};
-    var deduped = [];
-    items.forEach(function(item) {
-      if (seen[item.name]) {
-        seen[item.name].amt += item.amt;
-      } else {
-        seen[item.name] = item;
-        deduped.push(item);
-      }
-    });
-    groups.push({
-      id: g.id,
-      label: g.name,
-      items: deduped
-    });
+  // Build groups from v2 data model
+  var allGroups = (state.groups || []).filter(function(g) {
+    return rulesForGroup(g.id).length > 0;
   });
 
-  groups = groups.filter(function(g){ return g.items.length > 0; });
+  var groups = allGroups.map(function(g) {
+    var rules = rulesForGroup(g.id);
+    var items = rules.map(function(r) {
+      return { name: r.category || r.name, budget: budgetForCategoryInMonth(r.category || r.name, y, m) };
+    });
+    // Dedupe by name
+    var seen = {};
+    items = items.filter(function(it) { if (seen[it.name]) return false; seen[it.name] = true; return true; });
+    return { id: g.id, label: g.name, type: g.type, items: items };
+  }).filter(function(g) { return g.items.length > 0; });
 
   var html = '';
 
   groups.forEach(function(g) {
     var isOpen = !collapsed[g.id];
-    var groupBudget = g.items.reduce(function(s,c){ return s + budgetForCategoryInMonth(c.name, y, m); }, 0);
+    var groupBudget = g.items.reduce(function(s,c){ return s + c.budget; }, 0);
     var groupSpent  = g.items.reduce(function(s,c){ return s + spentInMonth(c.name, y, m); }, 0);
     var groupOver   = groupSpent > groupBudget && groupBudget > 0;
 
-    // Group header mini-bar — dual color when over
+    // Group header mini-bar
     var miniBar = '';
     if (groupOver && groupBudget > 0) {
       var greenW = Math.round(groupBudget / groupSpent * 100);
       var redW   = 100 - greenW;
-      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
-        '<div class="bar-dual" style="width:100%">' +
-          '<div class="bar-dual-good" style="width:' + greenW + '%"></div>' +
-          '<div class="bar-dual-bad" style="width:' + redW + '%"></div>' +
-        '</div></div>';
+      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px"><div class="bar-dual" style="width:100%"><div class="bar-dual-good" style="width:' + greenW + '%"></div><div class="bar-dual-bad" style="width:' + redW + '%"></div></div></div>';
     } else {
       var groupPct = groupBudget > 0 ? Math.min(Math.round(groupSpent/groupBudget*100), 100) : 0;
-      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px">' +
-        '<div style="height:100%;width:' + groupPct + '%;background:var(--teal);border-radius:999px"></div></div>';
+      miniBar = '<div style="width:80px;height:4px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;margin-right:4px"><div style="height:100%;width:' + groupPct + '%;background:var(--teal);border-radius:999px"></div></div>';
     }
 
     html += '<div style="margin-bottom:12px">';
-
-    // Group header
     html += '<div class="group-hdr" onclick="toggleGroup(\'' + g.id + '\')">' +
-      '<div class="group-hdr-label">' +
-        '<span class="group-chevron ' + (isOpen ? 'open' : '') + '">›</span>' +
-        g.label +
-      '</div>' +
-      '<div class="group-hdr-right">' +
-        miniBar +
+      '<div class="group-hdr-label"><span class="group-chevron ' + (isOpen ? 'open' : '') + '">›</span>' + g.label + '</div>' +
+      '<div class="group-hdr-right">' + miniBar +
         '<span style="color:' + (groupOver?'var(--red2)':'var(--muted)') + '">' + fmtInt(groupSpent) + ' / ' + fmtInt(groupBudget) + '</span>' +
         (groupOver ? '<span style="color:var(--red2);font-size:10px;font-weight:600">+' + fmtInt(groupSpent - groupBudget) + ' OVER</span>' : '') +
-      '</div>' +
-    '</div>';
+      '</div></div>';
 
-    // Group body — individual items with dual-color bars
     var maxH = isOpen ? (g.items.length * 60) + 'px' : '0';
     html += '<div class="group-body' + (isOpen ? '' : ' collapsed') + '" id="gbody-' + g.id + '" style="max-height:' + maxH + '">';
 
     g.items.forEach(function(cat) {
       var spent = spentInMonth(cat.name, y, m);
-      var catBudget = budgetForCategoryInMonth(cat.name, y, m);
+      var catBudget = cat.budget;
       var over  = spent > catBudget && catBudget > 0;
       var overAmt = over ? spent - catBudget : 0;
       var overPct = over ? Math.round(overAmt / catBudget * 100) : 0;
 
-      // Bar rendering
       var barHtml = '';
       if (catBudget === 0 && spent === 0) {
-        // Not due this month, no spend — thin empty bar
         barHtml = '<div class="progress-track" style="height:5px"><div class="progress-fill" style="width:0"></div></div>';
       } else if (catBudget === 0 && spent > 0) {
-        // Not due but there's spend — show as unexpected (amber)
         barHtml = '<div class="progress-track" style="height:5px"><div class="progress-fill fill-warn" style="width:100%"></div></div>';
       } else if (over) {
         var greenW = Math.round(catBudget / spent * 100);
         var overW  = 100 - greenW;
         var overColor = overPct > 20 ? 'bar-dual-bad' : 'bar-dual-over';
-        barHtml = '<div class="progress-track" style="height:5px">' +
-          '<div class="bar-dual" style="width:100%">' +
-            '<div class="bar-dual-good" style="width:' + greenW + '%"></div>' +
-            '<div class="' + overColor + '" style="width:' + overW + '%"></div>' +
-          '</div></div>';
+        barHtml = '<div class="progress-track" style="height:5px"><div class="bar-dual" style="width:100%"><div class="bar-dual-good" style="width:' + greenW + '%"></div><div class="' + overColor + '" style="width:' + overW + '%"></div></div></div>';
       } else {
         var pct = catBudget > 0 ? Math.min(Math.round(spent/catBudget*100), 100) : 0;
-        barHtml = '<div class="progress-track" style="height:5px">' +
-          '<div class="progress-fill fill-good" style="width:' + pct + '%"></div></div>';
+        barHtml = '<div class="progress-track" style="height:5px"><div class="progress-fill fill-good" style="width:' + pct + '%"></div></div>';
       }
 
-      // Label
       var labelRight = '';
-      var notDue = catBudget === 0 && cat.freq && cat.freq !== 'monthly';
-      if (notDue && spent === 0) {
-        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">not due · ' + freqLabel(cat.freq) + '</span>';
+      if (catBudget === 0 && spent === 0) {
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">not due this month</span>';
       } else if (over) {
-        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--red2)">' +
-          fmtInt(spent) + ' / ' + fmtInt(catBudget) +
-          ' <span style="font-weight:600">+' + fmtInt(overAmt) + '</span></span>';
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--red2)">' + fmtInt(spent) + ' / ' + fmtInt(catBudget) + ' <span style="font-weight:600">+' + fmtInt(overAmt) + '</span></span>';
       } else {
-        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' +
-          fmtInt(spent) + ' / ' + fmtInt(catBudget) + '</span>';
+        labelRight = '<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">' + fmtInt(spent) + ' / ' + fmtInt(catBudget) + '</span>';
       }
 
-      html += '<div class="progress-wrap" style="padding-left:16px;margin-bottom:10px">' +
-        '<div class="progress-label">' +
-          '<span style="font-size:12px;color:' + (over?'var(--red2)':'var(--white)') + '">' + cat.name + '</span>' +
-          labelRight +
-        '</div>' +
-        barHtml +
-      '</div>';
+      html += '<div class="progress-wrap" style="padding-left:16px;margin-bottom:10px"><div class="progress-label"><span style="font-size:12px;color:' + (over?'var(--red2)':'var(--white)') + '">' + cat.name + '</span>' + labelRight + '</div>' + barHtml + '</div>';
     });
 
     html += '</div></div>';
@@ -2803,7 +2787,8 @@ function renderDashTx(y, m) {
 
 function renderDashboard() {
   // First-run prompt
-  if (!state.income || state.income === 0) {
+  var hasIncome = (state.income && state.income > 0) || incomeRules().length > 0;
+  if (!hasIncome) {
     var cards = document.getElementById("dash-cards");
     var prog  = document.getElementById("dash-progress");
     var recent = document.getElementById("recent-tx");
@@ -2842,8 +2827,8 @@ function renderDashboard() {
   var left = incomeThisMonth - totalSpent;
 
   // Free cash = income minus all budgeted needs+wants (monthly averages for planning)
-  var needsMonthly = monthlyNeeds();
-  var wantsMonthly = monthlyWants();
+  var needsMonthly = v2MonthlyNeeds();
+  var wantsMonthly = v2MonthlyWants();
   var freeCash = incomeThisMonth - needsMonthly - wantsMonthly;
 
   // Track active card filter
@@ -2948,10 +2933,8 @@ function syncWeeklyCats() {
     var rules = (state.recurring || []).filter(function(r) {
       return r.active && r.billType !== 'income' && (r.category === wc.name || r.name === wc.name);
     });
-    if (rules.length > 0) {
-      var monthly = rules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
-      wc.budget = Math.round(monthly / 4.33);
-    }
+    var monthlyAmt = rules.reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
+    wc.budget = Math.round(monthlyAmt / 4.33);
   });
 }
 
@@ -3031,7 +3014,20 @@ function renderMonthly() {
   var y = plMonth.year, m = plMonth.month;
   document.getElementById('pl-month-display').textContent = monthStr(y, m);
 
-  var totalBudget = totalBudgetForMonth(y, m);
+  var needsBudget = 0, wantsBudget = 0;
+  var needCats = [], wantCats = [];
+  var seen = {};
+  (state.recurring || []).forEach(function(r) {
+    if (!r.active || r.billType === 'income') return;
+    var name = r.category || r.name;
+    if (seen[name]) return;
+    seen[name] = true;
+    var grp = groupForCategory(name);
+    var amt = budgetForCategoryInMonth(name, y, m);
+    if (grp && grp.type === 'need') { needsBudget += amt; needCats.push({ name: name, budget: amt }); }
+    else { wantsBudget += amt; wantCats.push({ name: name, budget: amt }); }
+  });
+  var totalBudget = needsBudget + wantsBudget;
   var totalSpent = state.transactions.filter(t => t.type==='expense' && txInMonth(t,y,m)).reduce((s,t) => s+parseFloat(t.amount||0), 0);
   var incomeActual = actualOrExpectedIncome(y, m);
   var net = incomeActual - totalSpent;
@@ -3043,7 +3039,6 @@ function renderMonthly() {
     {label:'vs Budget', val:(totalSpent<=totalBudget?'Under':'Over'), cls:totalSpent<=totalBudget?'good':'bad'},
   ].map(c => '<div class="stat-card ' + c.cls + '"><div class="stat-label">' + c.label + '</div><div class="stat-val">' + c.val + '</div></div>').join('');
 
-  // Categories table — built from recurring rules, grouped by need/want
   var tbody = document.getElementById('pl-cats');
   var rows = '';
   var nRules = needRules();
@@ -3061,20 +3056,18 @@ function renderMonthly() {
   }
 
   rows += '<tr class="subhdr"><td colspan="5">Needs</td></tr>';
-  dedupeRules(nRules).forEach(function(r) {
-    var catName = r.category || r.name;
-    var spent = spentInMonth(catName, y, m);
-    var catBudget = budgetForCategoryInMonth(catName, y, m);
+  needCats.forEach(function(cat) {
+    var spent = spentInMonth(cat.name, y, m);
+    var catBudget = cat.budget;
     var pct = catBudget > 0 ? Math.round(spent/catBudget*100) : 0;
     var diff = catBudget - spent;
-    var notDue = catBudget === 0 && (r.schedule === 'semiannual' || r.schedule === 'annual');
-    rows += '<tr style="' + (notDue && spent === 0 ? 'opacity:.4' : '') + '"><td>' + catName + (notDue ? ' <span style="font-size:10px;color:var(--muted)">(' + scheduleLabel(r) + ')</span>' : '') + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + (notDue && spent === 0 ? 'badge-muted' : badgeClass(pct)) + '">' + (notDue && spent === 0 ? 'N/A' : pct + '%') + '</span></td></tr>';
+    var notDue = catBudget === 0;
+    rows += '<tr style="' + (notDue && spent === 0 ? 'opacity:.4' : '') + '"><td>' + cat.name + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + (notDue && spent === 0 ? 'badge-muted' : badgeClass(pct)) + '">' + (notDue && spent === 0 ? 'N/A' : pct + '%') + '</span></td></tr>';
   });
   rows += '<tr class="subhdr"><td colspan="5">Wants</td></tr>';
-  dedupeRules(wRules).forEach(function(r) {
-    var catName = r.category || r.name;
-    var spent = spentInMonth(catName, y, m);
-    var catBudget = budgetForCategoryInMonth(catName, y, m);
+  wantCats.forEach(function(cat) {
+    var spent = spentInMonth(cat.name, y, m);
+    var catBudget = cat.budget;
     var pct = catBudget > 0 ? Math.round(spent/catBudget*100) : 0;
     var diff = catBudget - spent;
     rows += '<tr><td>' + catName + '</td><td class="r">' + fmtInt(catBudget) + '</td><td class="r">' + fmtInt(spent) + '</td><td class="r" style="color:' + (diff>=0?'var(--teal2)':'var(--red2)') + '">' + (diff>=0?'+':'-') + fmtInt(Math.abs(diff)) + '</td><td><span class="badge ' + badgeClass(pct) + '">' + pct + '%</span></td></tr>';
@@ -3194,7 +3187,7 @@ function renderNeeds() {
     if (rules.length === 0) return;
     var gid = 'needs-' + g.id;
     var isOpen = !collapsed[gid];
-    var subtotal = rules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
+    var subtotal = rules.reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
     total += subtotal;
     var chevron = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
     html += '<tr class="subhdr" onclick="toggleGroup(\'' + gid + '\')" style="cursor:pointer;user-select:none">';
@@ -3204,146 +3197,285 @@ function renderNeeds() {
     if (isOpen) {
       rules.forEach(function(r) {
         var idx = state.recurring.indexOf(r);
-        var monthly = recurringMonthlyAmtHelper(r);
+        var monthlyAmt = recurringMonthlyAmt(r);
         var freqNote = '';
         if (r.schedule !== 'monthly') {
           freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(r.amount) + ' ' + scheduleLabel(r) + '</div>';
         }
         html += '<tr>';
         html += '<td style="padding-left:1.5rem"><span style="color:var(--teal2);font-size:10px;margin-right:6px">●</span>' + r.name + '</td>';
-        html += '<td class="r">' + fmtInt(monthly) + '/mo' + freqNote + '</td>';
-        html += '<td class="muted">' + (r.notes || '') + '</td>';
+        html += '<td class="r">' + fmtInt(monthlyAmt) + '/mo' + freqNote + '</td>';
+        html += '<td class="muted" style="font-size:11px">' + (r.notes || '') + '</td>';
         html += '<td><button class="btn btn-ghost btn-sm" onclick="openEditRecurring(' + idx + ')">Edit</button></td>';
         html += '</tr>';
       });
     }
   });
 
-  // Rules without a proper group assignment
-  var ungroupedRules = needRules().filter(function(r) {
-    var cat = catByName(r.category);
-    if (!cat || !cat.groupId) return true;
-    return !needGroups.some(function(g) { return g.id === cat.groupId; });
-  });
-  // Show ungrouped only if there are any and no grouped rules
-  if (ungroupedRules.length > 0) {
-    var uTotal = ungroupedRules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
-    total += uTotal;
-    html += '<tr class="subhdr"><td>Other</td><td class="r" style="font-family:var(--mono);color:var(--teal2)">' + fmtInt(uTotal) + '/mo</td><td class="muted">' + ungroupedRules.length + ' items</td><td></td></tr>';
-    ungroupedRules.forEach(function(r) {
-      var idx = state.recurring.indexOf(r);
-      html += '<tr><td style="padding-left:1.5rem">' + r.name + '</td><td class="r">' + fmtInt(recurringMonthlyAmtHelper(r)) + '/mo</td><td class="muted">' + (r.notes||'') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditRecurring(' + idx + ')">Edit</button></td></tr>';
-    });
-  }
-
-  if (html === '') {
-    html = '<tr><td colspan="4" class="muted" style="text-align:center;padding:2rem">No recurring rules for need categories yet. <a href="#" onclick="nav(\'recurring\');return false" style="color:var(--teal2)">Add recurring rules</a> and assign them to need-group categories.</td></tr>';
-  }
-
-  // Income and surplus/deficit
-  var incTotal = monthlyIncome();
-  var wTotal = monthlyWants();
-  var surplus = incTotal - total - wTotal;
-  html += '<tr class="total-row"><td>Total Needs</td><td class="r" style="font-family:var(--mono)">' + fmtInt(total) + '/mo</td><td colspan="2"></td></tr>';
-  html += '<tr><td style="color:var(--muted)">Monthly Income</td><td class="r" style="font-family:var(--mono);color:var(--teal2)">' + fmtInt(incTotal) + '</td><td colspan="2"></td></tr>';
-  html += '<tr><td style="color:var(--muted)">' + (surplus >= 0 ? 'Surplus' : 'Deficit') + '</td><td class="r" style="font-family:var(--mono);color:' + (surplus >= 0 ? 'var(--teal2)' : 'var(--red2)') + '">' + (surplus >= 0 ? '+' : '-') + fmtInt(Math.abs(surplus)) + '</td><td colspan="2"></td></tr>';
-
-  document.getElementById('needs-tbl').innerHTML = html;
+  // Summary row
+  var income = v2MonthlyIncome();
+  var surplus = income - total - v2MonthlyWants();
+  html += '<tr class="total-row"><td>Total Needs</td><td class="r">' + fmtInt(total) + '/mo</td><td class="muted" style="font-size:11px">Income: ' + fmtInt(income) + ' | Surplus: <span style="color:' + (surplus >= 0 ? 'var(--teal2)' : 'var(--red2)') + '">' + fmtInt(Math.abs(surplus)) + '</span></td><td></td></tr>';
+  document.getElementById('needs-tbl').innerHTML = html || '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No recurring rules linked to need groups yet. <a href="#" onclick="nav(\'recurring\');return false" style="color:var(--teal2)">Set up recurring rules →</a></td></tr>';
 }
 
 function renderWants() {
-  var rules = wantRules();
-  var total = rules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
+  var wantGroups = (state.groups || []).filter(function(g) { return g.type === 'want'; });
+  var total = 0;
   var rows = '';
 
-  if (rules.length === 0) {
-    rows = '<tr><td colspan="4" class="muted" style="text-align:center;padding:2rem">No recurring rules for want categories yet. <a href="#" onclick="nav(\'recurring\');return false" style="color:var(--teal2)">Add recurring rules</a> and assign them to want-group categories.</td></tr>';
-  } else {
-    // Group by want groups
-    var wantGroups = (state.groups || []).filter(function(g) { return g.type === 'want'; });
-    wantGroups.forEach(function(g) {
-      var grpRules = rulesForGroup(g.id);
-      if (grpRules.length === 0) return;
-      var subtotal = grpRules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
-      rows += '<tr class="subhdr"><td>' + g.name + '</td><td class="r" style="font-family:var(--mono);color:var(--amber2)">' + fmtInt(subtotal) + '/mo</td><td class="muted">' + grpRules.length + ' items</td><td></td></tr>';
-      grpRules.forEach(function(r) {
-        var idx = state.recurring.indexOf(r);
-        var monthly = recurringMonthlyAmtHelper(r);
-        var freqNote = '';
-        if (r.schedule !== 'monthly') {
-          freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(r.amount) + ' ' + scheduleLabel(r) + '</div>';
-        }
-        rows += '<tr><td style="padding-left:1.5rem">' + r.name + '</td><td class="r">' + fmtInt(monthly) + '/mo' + freqNote + '</td><td class="muted">' + (r.notes || '') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditRecurring(' + idx + ')">Edit</button></td></tr>';
-      });
+  wantGroups.forEach(function(g) {
+    var rules = rulesForGroup(g.id);
+    if (rules.length === 0) return;
+    var subtotal = rules.reduce(function(s, r) { return s + recurringMonthlyAmt(r); }, 0);
+    total += subtotal;
+    rows += '<tr class="subhdr"><td colspan="4">' + g.name + ' — ' + fmtInt(subtotal) + '/mo</td></tr>';
+    rules.forEach(function(r) {
+      var idx = state.recurring.indexOf(r);
+      var monthlyAmt = recurringMonthlyAmt(r);
+      var freqNote = '';
+      if (r.schedule !== 'monthly') {
+        freqNote = '<div style="font-size:10px;color:var(--muted)">' + fmtInt(r.amount) + ' ' + scheduleLabel(r) + '</div>';
+      }
+      rows += '<tr><td>' + r.name + '</td><td class="r">' + fmtInt(monthlyAmt) + '/mo' + freqNote + '</td><td class="muted">' + (r.notes || '') + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditRecurring(' + idx + ')">Edit</button></td></tr>';
     });
-  }
+  });
 
-  rows += '<tr class="total-row"><td>Total Wants</td><td class="r" style="font-family:var(--mono)">' + fmtInt(total) + '</td><td colspan="2"></td></tr>';
-  document.getElementById('wants-tbl').innerHTML = rows;
+  rows += '<tr class="total-row"><td>Total Wants</td><td class="r">' + fmtInt(total) + '</td><td colspan="2"></td></tr>';
+  document.getElementById('wants-tbl').innerHTML = rows || '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No recurring rules linked to want groups yet. <a href="#" onclick="nav(\'recurring\');return false" style="color:var(--teal2)">Set up recurring rules →</a></td></tr>';
 }
 
 // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
 function renderSubs() { nav('recurring'); }
 
+// ─── CATEGORIES & GROUPS ─────────────────────────────────────────────────────
+
+function renderCategories() {
+  // Groups table
+  var gt = document.getElementById('groups-tbl');
+  if (gt) {
+    if (!state.groups || state.groups.length === 0) {
+      gt.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:1.5rem">No groups yet</td></tr>';
+    } else {
+      gt.innerHTML = state.groups.map(function(g, i) {
+        var catCount = (state.categories || []).filter(function(c) { return c.groupId === g.id; }).length;
+        var typeBadge = g.type === 'need'
+          ? '<span class="badge badge-good" style="cursor:pointer;font-size:10px" onclick="event.stopPropagation();toggleGroupType(' + i + ')">NEED</span>'
+          : '<span class="badge badge-warn" style="cursor:pointer;font-size:10px" onclick="event.stopPropagation();toggleGroupType(' + i + ')">WANT</span>';
+        return '<tr><td>' + g.name + '</td><td>' + typeBadge + '</td><td class="muted">' + catCount + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditGroup(' + i + ')">Edit</button></td></tr>';
+      }).join('');
+    }
+  }
+
+  // Categories table
+  var ct = document.getElementById('categories-tbl');
+  if (ct) {
+    var cats = (state.categories || []).slice().sort(function(a,b) { return a.name.localeCompare(b.name); });
+    if (cats.length === 0) {
+      ct.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:1.5rem">No categories yet</td></tr>';
+    } else {
+      ct.innerHTML = cats.map(function(c) {
+        var idx = state.categories.indexOf(c);
+        var grp = c.groupId ? groupById(c.groupId) : null;
+        var grpName = grp ? grp.name : '<span class="muted">—</span>';
+        var kwds = (c.keywords || []).slice(0, 3).join(', ');
+        if ((c.keywords || []).length > 3) kwds += ' +' + (c.keywords.length - 3);
+        var txCount = state.transactions.filter(function(t) { return t.category === c.name; }).length;
+        return '<tr><td>' + c.name + '</td><td>' + grpName + '</td><td class="muted" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (c.keywords||[]).join(', ') + '">' + (kwds || '—') + '</td><td class="muted">' + txCount + '</td><td><button class="btn btn-ghost btn-sm" onclick="openEditCategory(' + idx + ')">Edit</button></td></tr>';
+      }).join('');
+    }
+  }
+}
+
+function toggleGroupType(idx) {
+  var g = state.groups[idx];
+  g.type = g.type === 'need' ? 'want' : 'need';
+  saveState();
+  renderCategories();
+}
+
+function openAddGroup() {
+  document.getElementById('modal-group-title').textContent = 'Add Group';
+  document.getElementById('edit-grp-idx').value = -1;
+  document.getElementById('grp-delete-btn').style.display = 'none';
+  document.getElementById('grp-name').value = '';
+  document.getElementById('grp-type-need').checked = true;
+  document.getElementById('modal-group').classList.add('open');
+}
+
+function openEditGroup(idx) {
+  var g = state.groups[idx];
+  document.getElementById('modal-group-title').textContent = 'Edit Group';
+  document.getElementById('edit-grp-idx').value = idx;
+  document.getElementById('grp-delete-btn').style.display = 'inline-block';
+  document.getElementById('grp-name').value = g.name;
+  document.getElementById('grp-type-' + g.type).checked = true;
+  document.getElementById('modal-group').classList.add('open');
+}
+
+function saveGroup() {
+  var idx = parseInt(document.getElementById('edit-grp-idx').value);
+  var name = document.getElementById('grp-name').value.trim();
+  var type = document.querySelector('input[name="grp-type"]:checked').value;
+  if (!name) { showToast('Enter a group name'); return; }
+  var id = 'grp_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  if (idx === -1) {
+    state.groups.push({ id: id, name: name, type: type });
+  } else {
+    state.groups[idx].name = name;
+    state.groups[idx].type = type;
+  }
+  saveState();
+  closeModal('modal-group');
+  showToast('Group saved');
+  renderCategories();
+}
+
+function deleteGroup() {
+  var idx = parseInt(document.getElementById('edit-grp-idx').value);
+  if (idx < 0) return;
+  var g = state.groups[idx];
+  // Unlink categories from this group
+  (state.categories || []).forEach(function(c) { if (c.groupId === g.id) c.groupId = null; });
+  state.groups.splice(idx, 1);
+  saveState();
+  closeModal('modal-group');
+  showToast('Group deleted');
+  renderCategories();
+}
+
+function openAddCategory() {
+  document.getElementById('modal-category-title').textContent = 'Add Category';
+  document.getElementById('edit-cat-idx').value = -1;
+  document.getElementById('cat-delete-btn').style.display = 'none';
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-keywords').value = '';
+  populateCatGroupSelect('');
+  document.getElementById('modal-category').classList.add('open');
+}
+
+function openEditCategory(idx) {
+  var c = state.categories[idx];
+  document.getElementById('modal-category-title').textContent = 'Edit Category';
+  document.getElementById('edit-cat-idx').value = idx;
+  document.getElementById('cat-delete-btn').style.display = 'inline-block';
+  document.getElementById('cat-name').value = c.name;
+  document.getElementById('cat-keywords').value = (c.keywords || []).join('\n');
+  populateCatGroupSelect(c.groupId || '');
+  document.getElementById('modal-category').classList.add('open');
+}
+
+function populateCatGroupSelect(selectedId) {
+  var sel = document.getElementById('cat-group');
+  sel.innerHTML = '<option value="">— No group —</option>' +
+    (state.groups || []).map(function(g) {
+      return '<option value="' + g.id + '"' + (g.id === selectedId ? ' selected' : '') + '>' + g.name + ' (' + g.type + ')</option>';
+    }).join('');
+}
+
+function saveCategory() {
+  var idx = parseInt(document.getElementById('edit-cat-idx').value);
+  var name = document.getElementById('cat-name').value.trim();
+  var groupId = document.getElementById('cat-group').value || null;
+  var keywords = document.getElementById('cat-keywords').value.split('\n').map(function(k) { return k.trim(); }).filter(Boolean);
+  if (!name) { showToast('Enter a category name'); return; }
+  var id = 'cat_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  if (idx === -1) {
+    state.categories.push({ id: id, name: name, groupId: groupId, keywords: keywords });
+  } else {
+    var oldName = state.categories[idx].name;
+    state.categories[idx].name = name;
+    state.categories[idx].groupId = groupId;
+    state.categories[idx].keywords = keywords;
+    // Rename in transactions if name changed
+    if (oldName !== name) {
+      state.transactions.forEach(function(t) { if (t.category === oldName) t.category = name; });
+      state.recurring.forEach(function(r) { if (r.category === oldName) r.category = name; });
+    }
+  }
+  saveState();
+  closeModal('modal-category');
+  showToast('Category saved');
+  renderCategories();
+}
+
+function deleteCategory() {
+  var idx = parseInt(document.getElementById('edit-cat-idx').value);
+  if (idx < 0) return;
+  state.categories.splice(idx, 1);
+  saveState();
+  closeModal('modal-category');
+  showToast('Category deleted');
+  renderCategories();
+}
+
 // ─── BUDGET PLAN ──────────────────────────────────────────────────────────────
 
 function renderBudgetPlan() {
-  var mInc = monthlyIncome();
-  var needsTotal = monthlyNeeds();
-  var wantsTotal = monthlyWants();
-  var fCash = freeCashMonthly();
-
-  // Summary cards
-  var planCards = document.getElementById('plan-cards');
-  if (planCards) planCards.innerHTML = [
-    { label: 'Annual Income', val: fmtInt(mInc * 12), note: fmtInt(mInc) + '/mo', cls: 'good' },
-    { label: 'Annual Needs', val: fmtInt(needsTotal * 12), note: mInc > 0 ? Math.round(needsTotal/mInc*100) + '% of income' : '', cls: 'neutral' },
-    { label: 'Annual Wants', val: fmtInt(wantsTotal * 12), note: mInc > 0 ? Math.round(wantsTotal/mInc*100) + '% of income' : '', cls: 'warn' },
-    { label: 'Annual Free Cash', val: fmtInt(Math.abs(fCash) * 12), note: fCash >= 0 ? 'available for debt/savings' : 'over-committed', cls: fCash >= 0 ? 'good' : 'bad' },
-  ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div>'+(c.note?'<div class="stat-note">'+c.note+'</div>':'')+'</div>'; }).join('');
-
-  // Build grouped breakdown from recurring rules
-  var html = '';
+  var _now = new Date();
+  var _planInc = v2MonthlyIncome() || expectedIncomeForMonth(_now.getFullYear(), _now.getMonth());
+  var _incEl = document.getElementById('plan-income-val');
+  var _incNote = document.getElementById('plan-income-note');
+  if (_incEl) _incEl.textContent = fmtInt(_planInc);
+  if (_incNote) {
+    var thisMonthInc = expectedIncomeForMonth(_now.getFullYear(), _now.getMonth());
+    _incNote.textContent = thisMonthInc > (_planInc * 1.4) ? 'This month — 3 paychecks!' : 'Monthly income';
+  }
+  var needsTotal = v2MonthlyNeeds();
+  var wantsTotal = v2MonthlyWants();
+  var left = _planInc - needsTotal - wantsTotal;
+  document.getElementById('plan-needs-val').textContent = fmtInt(needsTotal);
+  document.getElementById('plan-needs-pct').textContent = _planInc > 0 ? Math.round(needsTotal/_planInc*100) + '% of income' : '';
+  document.getElementById('plan-wants-val').textContent = fmtInt(wantsTotal);
+  document.getElementById('plan-wants-pct').textContent = _planInc > 0 ? Math.round(wantsTotal/_planInc*100) + '% of income' : '';
+  document.getElementById('plan-left-val').textContent = fmtInt(Math.abs(left));
 
   // Over-commitment warning
-  if (fCash < 0) {
-    html += '<div style="background:rgba(192,57,43,.15);border:1px solid var(--red2);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem">' +
-      '<div style="font-size:14px;font-weight:600;color:var(--red2);margin-bottom:4px">Over-committed by ' + fmtInt(Math.abs(fCash)) + '/mo (' + fmtInt(Math.abs(fCash)*12) + '/yr)</div>' +
-      '<div style="font-size:12px;color:var(--muted)">You need to cut ' + fmtInt(Math.abs(fCash)) + ' from wants or increase income.</div>' +
-    '</div>';
+  var overWarning = '';
+  if (left < 0) {
+    overWarning = '<div style="background:rgba(192,57,43,.12);border:1px solid var(--red2);border-radius:10px;padding:1rem;margin-bottom:1.25rem;font-size:13px;color:var(--red2)">' +
+      '<strong>Over-committed by ' + fmtInt(Math.abs(left)) + '/mo (' + fmtInt(Math.abs(left) * 12) + '/yr)</strong><br>' +
+      '<span style="color:var(--muted)">You need to cut ' + fmtInt(Math.abs(left)) + ' from wants or increase income.</span></div>';
   }
 
-  // Needs section grouped by groups
-  var needGrps = (state.groups || []).filter(function(g) { return g.type === 'need'; });
-  html += '<div class="section"><div class="section-hdr"><div class="section-title">Needs — ' + fmtInt(needsTotal) + '/mo</div></div><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="r">Monthly</th><th>Schedule</th></tr></thead><tbody>';
-  needGrps.forEach(function(g) {
-    var rules = rulesForGroup(g.id);
-    if (rules.length === 0) return;
-    var subtotal = rules.reduce(function(s, r) { return s + recurringMonthlyAmtHelper(r); }, 0);
-    html += '<tr class="subhdr"><td colspan="2">' + g.name + '</td><td class="r" style="font-family:var(--mono)">' + fmtInt(subtotal) + '</td></tr>';
-    rules.forEach(function(r) {
-      html += '<tr><td>' + r.name + '</td><td class="r">' + fmtInt(recurringMonthlyAmtHelper(r)) + '</td><td class="muted" style="font-size:11px">' + scheduleLabel(r) + '</td></tr>';
-    });
-  });
-  html += '<tr class="total-row"><td>Total Needs</td><td class="r">' + fmtInt(needsTotal) + '</td><td></td></tr></tbody></table></div></div>';
-
-  // Wants section
-  var wRules = wantRules();
-  html += '<div class="section"><div class="section-hdr"><div class="section-title">Wants — ' + fmtInt(wantsTotal) + '/mo</div></div><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="r">Monthly</th><th>Schedule</th></tr></thead><tbody>';
-  wRules.forEach(function(r) {
-    html += '<tr><td>' + r.name + '</td><td class="r">' + fmtInt(recurringMonthlyAmtHelper(r)) + '</td><td class="muted" style="font-size:11px">' + scheduleLabel(r) + '</td></tr>';
-  });
-  html += '<tr class="total-row"><td>Total Wants</td><td class="r">' + fmtInt(wantsTotal) + '</td><td></td></tr></tbody></table></div></div>';
-
   // Multi-horizon breakdown table
-  html += '<div class="section"><div class="section-hdr"><div class="section-title">At every time horizon</div></div><div class="tbl-wrap"><table><thead><tr><th></th><th class="r">Daily</th><th class="r">Weekly</th><th class="r">Monthly</th><th class="r">Annual</th></tr></thead><tbody>';
-  html += '<tr><td style="font-weight:600;color:var(--teal2)">Income</td><td class="r">' + fmtInt(mInc/30) + '</td><td class="r">' + fmtInt(mInc/4.33) + '</td><td class="r">' + fmtInt(mInc) + '</td><td class="r">' + fmtInt(mInc*12) + '</td></tr>';
-  html += '<tr><td style="font-weight:600">Needs</td><td class="r">' + fmtInt(needsTotal/30) + '</td><td class="r">' + fmtInt(needsTotal/4.33) + '</td><td class="r">' + fmtInt(needsTotal) + '</td><td class="r">' + fmtInt(needsTotal*12) + '</td></tr>';
-  html += '<tr><td style="font-weight:600;color:var(--amber2)">Wants</td><td class="r">' + fmtInt(wantsTotal/30) + '</td><td class="r">' + fmtInt(wantsTotal/4.33) + '</td><td class="r">' + fmtInt(wantsTotal) + '</td><td class="r">' + fmtInt(wantsTotal*12) + '</td></tr>';
-  var surplusColor = fCash >= 0 ? 'var(--teal2)' : 'var(--red2)';
-  var surplusLabel = fCash >= 0 ? 'Surplus' : 'Deficit';
-  html += '<tr class="total-row"><td style="color:' + surplusColor + '">' + surplusLabel + '</td><td class="r" style="color:' + surplusColor + '">' + (fCash>=0?'+':'-') + fmtInt(Math.abs(fCash)/30) + '</td><td class="r" style="color:' + surplusColor + '">' + (fCash>=0?'+':'-') + fmtInt(Math.abs(fCash)/4.33) + '</td><td class="r" style="color:' + surplusColor + '">' + (fCash>=0?'+':'-') + fmtInt(Math.abs(fCash)) + '</td><td class="r" style="color:' + surplusColor + '">' + (fCash>=0?'+':'-') + fmtInt(Math.abs(fCash)*12) + '</td></tr>';
+  var html = overWarning;
+
+  // Breakdown table
+  html += '<div class="section"><div class="section-hdr"><div class="section-title">Budget at Every Horizon</div></div><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="r">Daily</th><th class="r">Weekly</th><th class="r">Monthly</th><th class="r">Annual</th></tr></thead><tbody>';
+
+  var needGroups = (state.groups || []).filter(function(g) { return g.type === 'need'; });
+  var wantGroups = (state.groups || []).filter(function(g) { return g.type === 'want'; });
+
+  function renderHorizonRows(groups, label) {
+    var sectionTotal = 0;
+    html += '<tr class="subhdr"><td colspan="5">' + label + '</td></tr>';
+    groups.forEach(function(g) {
+      var rules = rulesForGroup(g.id);
+      if (rules.length === 0) return;
+      // Dedupe by category
+      var seen = {};
+      rules.forEach(function(r) {
+        var name = r.category || r.name;
+        if (seen[name]) return;
+        seen[name] = true;
+        var mo = recurringMonthlyAmt(r);
+        sectionTotal += mo;
+        html += '<tr><td style="padding-left:1rem">' + name + '</td><td class="r muted">' + fmtInt(mo / 30) + '</td><td class="r muted">' + fmtInt(mo / 4.33) + '</td><td class="r">' + fmtInt(mo) + '</td><td class="r muted">' + fmtInt(mo * 12) + '</td></tr>';
+      });
+    });
+    html += '<tr style="font-weight:600;border-top:1px solid var(--border)"><td>' + label + ' Total</td><td class="r muted">' + fmtInt(sectionTotal / 30) + '</td><td class="r muted">' + fmtInt(sectionTotal / 4.33) + '</td><td class="r">' + fmtInt(sectionTotal) + '</td><td class="r muted">' + fmtInt(sectionTotal * 12) + '</td></tr>';
+    return sectionTotal;
+  }
+
+  renderHorizonRows(needGroups, 'Needs');
+  renderHorizonRows(wantGroups, 'Wants');
+
+  // Grand total / surplus
+  var totalOut = needsTotal + wantsTotal;
+  html += '<tr class="total-row"><td>Surplus / Deficit</td><td class="r" style="color:' + (left>=0?'var(--teal2)':'var(--red2)') + '">' + (left>=0?'+':'') + fmtInt(left / 30) + '</td><td class="r" style="color:' + (left>=0?'var(--teal2)':'var(--red2)') + '">' + (left>=0?'+':'') + fmtInt(left / 4.33) + '</td><td class="r" style="color:' + (left>=0?'var(--teal2)':'var(--red2)') + '">' + (left>=0?'+':'') + fmtInt(left) + '</td><td class="r" style="color:' + (left>=0?'var(--teal2)':'var(--red2)') + '">' + (left>=0?'+':'') + fmtInt(left * 12) + '</td></tr>';
+
   html += '</tbody></table></div></div>';
 
   document.getElementById('budget-plan-content').innerHTML = html;
@@ -3495,8 +3627,8 @@ function renderAvalanche() {
   if (hintEl) {
     var now = new Date();
     var income = actualOrExpectedIncome(now.getFullYear(), now.getMonth());
-    var needsMonthly = monthlyNeeds();
-    var wantsMonthly = monthlyWants();
+    var needsMonthly = v2MonthlyNeeds();
+    var wantsMonthly = v2MonthlyWants();
     var freeCash = income - needsMonthly - wantsMonthly;
     var afterDebt = freeCash - extra;
     hintEl.innerHTML = 'Your free cash: <span style="color:var(--teal2);font-weight:600">' + fmtInt(freeCash) + '/mo</span> (income ' + fmtInt(income) + ' − needs ' + fmtInt(needsMonthly) + ' − wants ' + fmtInt(wantsMonthly) + ')' +
@@ -4532,22 +4664,23 @@ function resolveCategory(desc, amount) {
   });
   if (containsKey) return overrides[containsKey];
 
-  // Check state.categories[].keywords (v2 migration data)
+  // Auto-categorize: first try state.categories keywords (v2), then fallback to autoCategory()
+  var autoCat = null;
   if (state.categories && state.categories.length > 0) {
     for (var ci = 0; ci < state.categories.length; ci++) {
       var cat = state.categories[ci];
       if (cat.keywords && cat.keywords.length > 0) {
         for (var ki = 0; ki < cat.keywords.length; ki++) {
-          if (cat.keywords[ki].length >= 3 && dUp.includes(cat.keywords[ki].toUpperCase())) {
-            return cat.name;
+          if (cat.keywords[ki] && dUp.includes(cat.keywords[ki].toUpperCase())) {
+            autoCat = cat.name;
+            break;
           }
         }
+        if (autoCat) break;
       }
     }
   }
-
-  // Final fallback — autoCategory() hardcoded keywords
-  var autoCat = autoCategory(desc);
+  if (!autoCat) autoCat = autoCategory(desc);
   return autoCat || 'Uncategorized';
 }
 
@@ -4862,16 +4995,15 @@ function updateAlertBadge() {
   // Count urgent alerts for badge
   var y = plMonth.year, m = plMonth.month;
   var urgentCount = 0;
-  var seenBadgeCats = {};
-  (state.recurring || []).forEach(function(r) {
-    if (!r.active || r.billType === 'income') return;
-    var catName = r.category || r.name;
-    if (seenBadgeCats[catName]) return;
-    seenBadgeCats[catName] = true;
+  var bCats = budgetCategories();
+  bCats.forEach(function(catName) {
     var spent = spentInMonth(catName, y, m);
     var catBudget = budgetForCategoryInMonth(catName, y, m);
     if (spent > catBudget && catBudget > 0) urgentCount++;
   });
+  // Over-committed
+  var mInc = v2MonthlyIncome();
+  if (mInc > 0 && (v2MonthlyNeeds() + v2MonthlyWants()) > mInc) urgentCount++;
   if (!DB.token) urgentCount++;
   var dbdS = typeof dbdSettings === 'function' ? dbdSettings() : {};
   if (dbdS.balance !== undefined && dbdS.balance < (dbdS.dangerThreshold || 200)) urgentCount++;
@@ -5526,12 +5658,11 @@ function renderRecurring() {
 
   var cards = document.getElementById('rec-cards');
   if (cards) cards.innerHTML = [
-    { label:'Total Income',   val: fmtInt(mInc),      cls:'good' },
-    { label:'Total Needs',    val: fmtInt(mNeeds),     cls:'neutral' },
-    { label:'Total Wants',    val: fmtInt(mWants),     cls:'warn' },
-    { label:'Free Cash',      val: fmtInt(Math.abs(mFree)), cls: mFree >= 0 ? 'good' : 'bad',
-      note: mFree >= 0 ? 'available for debt/savings' : 'over-committed by ' + fmtInt(Math.abs(mFree)) },
-  ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div>'+(c.note?'<div class="stat-note">'+c.note+'</div>':'')+'</div>'; }).join('');
+    { label:'Total Income',     val: fmtInt(v2MonthlyIncome()),   cls:'good' },
+    { label:'Total Needs',      val: fmtInt(v2MonthlyNeeds()),    cls:'neutral' },
+    { label:'Total Wants',      val: fmtInt(v2MonthlyWants()),    cls:'neutral' },
+    { label:'Free Cash',        val: fmtInt(v2FreeCash()),         cls: v2FreeCash() >= 0 ? 'good' : 'bad' },
+  ].map(function(c){ return '<div class="stat-card '+c.cls+'"><div class="stat-label">'+c.label+'</div><div class="stat-val">'+c.val+'</div></div>'; }).join('');
 
   function renderGroup(rules, tbodyId, showVariance) {
     var el = document.getElementById(tbodyId);
@@ -5573,7 +5704,11 @@ function recScheduleChanged() {
 }
 
 function populateRecCategorySelect(selected) {
-  populateRecCategorySelectV2(selected);
+  var sel = document.getElementById('rec-category');
+  if (!sel) return;
+  sel.innerHTML = allCategories().map(function(c){
+    return '<option value="' + c + '"' + (c===selected?' selected':'') + '>' + c + '</option>';
+  }).join('') + '<option value="__new_cat__">+ New Category...</option>';
 }
 
 function openAddRecurring(billType) {
@@ -5636,6 +5771,15 @@ function saveRecurring() {
   var amount   = parseFloat(document.getElementById('rec-amount').value) || 0;
   var variance = parseFloat(document.getElementById('rec-variance').value) || 0;
   var category = document.getElementById('rec-category').value;
+  // Handle "+ New Category" selection
+  if (category === '__new_cat__') {
+    category = prompt('Enter new category name:');
+    if (!category || !category.trim()) { showToast('Category name required'); return; }
+    category = category.trim();
+    if (!catByName(category)) {
+      state.categories.push({ id: 'cat_' + category.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: category, groupId: null, keywords: [] });
+    }
+  }
   var schedule = document.getElementById('rec-schedule').value;
   var start    = document.getElementById('rec-start').value;
   var end      = document.getElementById('rec-end').value;
@@ -5668,9 +5812,10 @@ function saveRecurring() {
   if (idx === -1) state.recurring.push(rule);
   else state.recurring[idx] = rule;
 
-  // Auto-sync: update matching budget item if one exists
-  if (billType !== 'income' && active) {
-    syncRecurringToBudget(rule);
+  // v2: Ensure category exists in state.categories
+  if (category && !catByName(category)) {
+    var grpId = null;
+    state.categories.push({ id: 'cat_' + category.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: category, groupId: grpId, keywords: [] });
   }
 
   saveState();
@@ -5790,15 +5935,15 @@ function renderNetWorth() {
     }
   }
 
-  // Debts table — auto-populated from debts with nwLiability flag
+  // Debts table — auto-populated from debts with nwLiability
   var dt = document.getElementById('nw-debts');
   if (dt) {
     var debts = (state.debts || []).filter(function(d) { return d.nwLiability !== false; });
     if (debts.length === 0) {
-      dt.innerHTML = '<tr><td colspan="2" class="muted" style="text-align:center;padding:1.5rem">No debts linked to net worth. Add debts on the Debts page.</td></tr>';
+      dt.innerHTML = '<tr><td colspan="2" class="muted" style="text-align:center;padding:1.5rem">No debts included — add debts on the Debts page</td></tr>';
     } else {
       dt.innerHTML = debts.map(function(d){
-        return '<tr><td>'+d.name+' <span style="font-size:10px;color:var(--muted)">'+(d.rate>0?d.rate.toFixed(1)+'%':'')+'</span></td><td class="r" style="font-family:var(--mono);color:var(--red2)">-'+fmtInt(d.balance||0)+'</td></tr>';
+        return '<tr><td>'+d.name+' <span style="font-size:10px;color:var(--muted)">'+(d.rate ? d.rate+'% APR' : '')+'</span></td><td class="r" style="font-family:var(--mono);color:var(--red2)">-'+fmtInt(d.balance||0)+'</td></tr>';
       }).join('') + '<tr class="total-row"><td>Total Debts</td><td class="r" style="font-family:var(--mono);color:var(--red2)">-'+fmtInt(nw.debts)+'</td></tr>';
     }
   }
@@ -6192,12 +6337,8 @@ function renderAlerts() {
 
   // 1. Over-budget categories (from recurring rules)
   var y = plMonth.year, m = plMonth.month;
-  var seenAlertCats = {};
-  (state.recurring || []).forEach(function(r) {
-    if (!r.active || r.billType === 'income') return;
-    var catName = r.category || r.name;
-    if (seenAlertCats[catName]) return;
-    seenAlertCats[catName] = true;
+  var bCats = budgetCategories();
+  bCats.forEach(function(catName) {
     var spent = spentInMonth(catName, y, m);
     var catBudget = budgetForCategoryInMonth(catName, y, m);
     if (catBudget === 0) return;
@@ -6208,11 +6349,13 @@ function renderAlerts() {
     }
   });
 
-  // Over-committed alert
-  var mInc = monthlyIncome(), mNeeds = monthlyNeeds(), mWants = monthlyWants();
-  if (mInc > 0 && (mNeeds + mWants) > mInc) {
-    var overAmt = mNeeds + mWants - mInc;
-    urgent.push({ icon:'⚠️', title: 'Over-committed by ' + fmtInt(overAmt) + '/mo', body: 'Total recurring (' + fmtInt(mNeeds + mWants) + ') exceeds income (' + fmtInt(mInc) + '). Cut wants or increase income.', cls:'urgent' });
+  // 1b. Over-committed alert
+  var mIncome = v2MonthlyIncome();
+  var mNeeds = v2MonthlyNeeds();
+  var mWants = v2MonthlyWants();
+  if (mIncome > 0 && (mNeeds + mWants) > mIncome) {
+    var overAmt = (mNeeds + mWants) - mIncome;
+    urgent.push({ icon:'⚠️', title: 'Over-committed by ' + fmtInt(overAmt) + '/mo', body: 'Total recurring (' + fmtInt(mNeeds + mWants) + ') exceeds income (' + fmtInt(mIncome) + '). Cut wants or increase income.', cls:'urgent' });
   }
 
   // 2. Upcoming bills in next 7 days
@@ -7132,7 +7275,7 @@ function openEditDebt(idx) {
   document.getElementById("debt-payment").value = d.payment || "";
   document.getElementById("debt-original").value = d.original || "";
   document.getElementById("debt-notes").value = d.notes || "";
-  document.getElementById("debt-nw-liability").value = d.nwLiability !== false ? "yes" : "no";
+  document.getElementById("debt-nw-liability").value = d.nwLiability === false ? "no" : "yes";
   document.getElementById("modal-debt").classList.add("open");
 }
 
@@ -7150,7 +7293,6 @@ function saveDebt() {
   var nwLiability = document.getElementById("debt-nw-liability").value === "yes";
 
   if (!name) { showToast("Enter a name"); return; }
-  // Default min to planned if not set
   if (!minPayment && payment) minPayment = payment;
 
   var debt = { name: name, type: type, balance: balance, original: original, rate: rate, minPayment: minPayment, payment: payment, notes: notes, nwLiability: nwLiability };
@@ -7251,16 +7393,13 @@ function renderReports() {
 
   // ── P&L Bar Chart
   var incData   = months.map(rptIncome);
-  // Compute needs/wants spend from categories linked to need/want groups
-  var needCatNames = {};
-  needRules().forEach(function(r) { needCatNames[r.category || r.name] = true; });
-  var wantCatNames = {};
-  wantRules().forEach(function(r) { wantCatNames[r.category || r.name] = true; });
+  var _needCatNames = needRules().map(function(r) { return r.category || r.name; }).filter(function(v,i,a){ return a.indexOf(v)===i; });
+  var _wantCatNames = wantRules().map(function(r) { return r.category || r.name; }).filter(function(v,i,a){ return a.indexOf(v)===i; });
   var needsData = months.map(function(m) {
-    return Object.keys(needCatNames).reduce(function(s,n){ return s + rptSpent(n, m); }, 0);
+    return _needCatNames.reduce(function(s,n){ return s + rptSpent(n, m); }, 0);
   });
   var wantsData = months.map(function(m) {
-    return Object.keys(wantCatNames).reduce(function(s,w){ return s + rptSpent(w, m); }, 0);
+    return _wantCatNames.reduce(function(s,w){ return s + rptSpent(w, m); }, 0);
   });
   var otherData = months.map(function(m, i) {
     var total = rptTotalSpent(m);
@@ -7294,8 +7433,9 @@ function renderReports() {
   }).join('');
 
   // ── Needs drift line chart
-  var topNeedRules = needRules().slice().sort(function(a,b){ return recurringMonthlyAmtHelper(b)-recurringMonthlyAmtHelper(a); }).slice(0,6);
-  var topNeeds = topNeedRules.map(function(r) { return { name: r.category || r.name, amt: recurringMonthlyAmtHelper(r) }; });
+  var topNeeds = needRules().map(function(r){ return { name: r.category || r.name, amt: recurringMonthlyAmt(r) }; })
+    .filter(function(v,i,a){ return a.findIndex(function(x){ return x.name === v.name; }) === i; })
+    .sort(function(a,b){ return b.amt-a.amt; }).slice(0,6);
   destroyChart('needs');
   var needsCtx = document.getElementById('rpt-needs-chart');
   if (needsCtx) {
@@ -7318,8 +7458,9 @@ function renderReports() {
   }
 
   // ── Wants drift line chart
-  var topWantRules = wantRules().slice().sort(function(a,b){ return recurringMonthlyAmtHelper(b)-recurringMonthlyAmtHelper(a); }).slice(0,6);
-  var topWants = topWantRules.map(function(r) { return { name: r.category || r.name, amt: recurringMonthlyAmtHelper(r) }; });
+  var topWants = wantRules().map(function(r){ return { name: r.category || r.name, amt: recurringMonthlyAmt(r) }; })
+    .filter(function(v,i,a){ return a.findIndex(function(x){ return x.name === v.name; }) === i; })
+    .sort(function(a,b){ return b.amt-a.amt; }).slice(0,6);
   destroyChart('wants');
   var wantsCtx = document.getElementById('rpt-wants-chart');
   if (wantsCtx) {
@@ -7537,6 +7678,8 @@ function ensureState() {
   if (!state.dayItems)     state.dayItems = [];
   if (!state.dbdSettings)  state.dbdSettings = {};
   if (!state.subscriptions) state.subscriptions = [];
+  if (!state.categories)   state.categories = [];
+  if (!state.groups)       state.groups = [];
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
@@ -7602,6 +7745,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('categories')"><span class="nav-icon">◧</span> Categories</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('needs')"><span class="nav-icon">⬡</span> Needs Budget</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('wants')"><span class="nav-icon">◉</span> Wants Budget</div>
+      <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('categories')"><span class="nav-icon">◧</span> Categories</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('budget')"><span class="nav-icon">≡</span> Budget Plan</div>
       <div class="nav-item" style="border-radius:8px" onclick="closeModal('modal-mob-menu');nav('roadmap')"><span class="nav-icon">→</span> Avalanche</div>
       <div style="height:1px;background:var(--border);margin:.5rem 0"></div>
