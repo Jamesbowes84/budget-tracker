@@ -2148,6 +2148,62 @@ function loadState() {
   if (!state.groups)       state.groups = [];
   // Run v2 migration
   migrateToV2(state);
+  // Force re-migration if categories are empty but old data exists
+  if ((!state.categories || state.categories.length === 0) && ((state.needs && state.needs.length > 0) || (state.wants && state.wants.length > 0))) {
+    state.schemaVersion = 1;
+    migrateToV2(state);
+  }
+  // Always repair category→group links
+  repairCategoryLinks();
+}
+
+// Fix broken category→group links on every load
+function repairCategoryLinks() {
+  if (!state.categories || !state.groups) return;
+  var needsLookup = {};
+  (state.needs || []).forEach(function(n) { needsLookup[n.name] = n.group || 'Other'; });
+  var wantsLookup = {};
+  (state.wants || []).forEach(function(w) { wantsLookup[w.name] = true; });
+  var fixed = 0;
+  state.categories.forEach(function(cat) {
+    // Skip if link is already good
+    if (cat.groupId) {
+      var grp = (state.groups || []).find(function(g) { return g.id === cat.groupId; });
+      if (grp) return;
+    }
+    // Fix from needs
+    if (needsLookup[cat.name]) {
+      var grpName = needsLookup[cat.name];
+      var matchGrp = (state.groups || []).find(function(g) { return g.name === grpName; });
+      if (matchGrp) { cat.groupId = matchGrp.id; fixed++; return; }
+    }
+    // Fix from wants
+    if (wantsLookup[cat.name]) {
+      var wGrp = (state.groups || []).find(function(g) { return g.type === 'want'; });
+      if (wGrp) { cat.groupId = wGrp.id; fixed++; return; }
+    }
+  });
+  // Ensure every recurring rule's category exists
+  (state.recurring || []).forEach(function(r) {
+    if (!r.category) return;
+    var exists = state.categories.find(function(c) { return c.name === r.category; });
+    if (!exists) {
+      var gid = null;
+      if (needsLookup[r.category]) {
+        var mg = (state.groups || []).find(function(g) { return g.name === needsLookup[r.category]; });
+        gid = mg ? mg.id : null;
+      } else if (wantsLookup[r.category]) {
+        var wg = (state.groups || []).find(function(g) { return g.type === 'want'; });
+        gid = wg ? wg.id : null;
+      }
+      state.categories.push({ id: 'cat_' + r.category.toLowerCase().replace(/[^a-z0-9]/g, '_'), name: r.category, groupId: gid, keywords: [] });
+      fixed++;
+    }
+  });
+  if (fixed > 0) {
+    console.log('[Budget Tracker] Repaired ' + fixed + ' category→group links');
+    saveState();
+  }
 }
 
 function saveState() {
@@ -2289,9 +2345,24 @@ function groupById(id) {
   return (state.groups || []).find(function(g) { return g.id === id; });
 }
 function groupForCategory(catName) {
+  if (!catName) return null;
   var cat = catByName(catName);
-  if (!cat || !cat.groupId) return null;
-  return groupById(cat.groupId);
+  if (cat && cat.groupId) {
+    var grp = groupById(cat.groupId);
+    if (grp) return grp;
+  }
+  // Fallback: check old state.needs/wants arrays
+  var isNeed = (state.needs || []).some(function(n) { return n.name === catName; });
+  if (isNeed) return { id: '_inferred_need', name: 'Other', type: 'need' };
+  var isWant = (state.wants || []).some(function(w) { return w.name === catName; });
+  if (isWant) return { id: '_inferred_want', name: 'Other', type: 'want' };
+  // Check recurring rule names against old arrays
+  var rule = (state.recurring || []).find(function(r) { return r.category === catName || r.name === catName; });
+  if (rule) {
+    if ((state.needs || []).some(function(n) { return n.name === rule.name || n.name === rule.category; })) return { id: '_inferred_need', name: 'Other', type: 'need' };
+    if ((state.wants || []).some(function(w) { return w.name === rule.name || w.name === rule.category; })) return { id: '_inferred_want', name: 'Other', type: 'want' };
+  }
+  return null;
 }
 
 // ── V2 BUDGET HELPERS — derive budget from recurring rules ──────────────────
@@ -2341,6 +2412,13 @@ function v2MonthlyWants() {
 function v2FreeCash() {
   return v2MonthlyIncome() - v2MonthlyNeeds() - v2MonthlyWants();
 }
+
+// Aliases — merge produced two naming conventions, keep both working
+function monthlyIncome() { return v2MonthlyIncome(); }
+function monthlyNeeds() { return v2MonthlyNeeds(); }
+function monthlyWants() { return v2MonthlyWants(); }
+function freeCashMonthly() { return v2FreeCash(); }
+function recurringMonthlyAmtHelper(rule) { return recurringMonthlyAmt(rule); }
 
 // Budget for a specific category in a specific month (period-aware)
 function budgetForCategoryInMonth(catName, y, m) {
@@ -4742,6 +4820,7 @@ function catOptions(selected) {
   var cats = allCategories();
   return cats.map(c => '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + c + '</option>').join('');
 }
+function catOpts(selected) { return catOptions(selected); }
 
 function isDuplicate(row) {
   return state.transactions.some(function(t) {
